@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta
+    name="description"
+    content="Order small-batch bread for future bakery pickup dates. Pay with Venmo, Zelle, or PayPal."
+  />
+  <title>Bakery Bread Orders</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap header-layout">
+      <div>
+        <p class="eyebrow">Fresh bread pickup orders</p>
+        <h1 data-bakery-name>Jen's Home Baked Goods</h1>
+        <p data-store-intro>
+          Choose a future pickup date, build your bread order, and submit.
+        </p>
+      </div>
+      <aside class="capacity-note" aria-label="Pickup date capacity">
+        <strong data-date-capacity>14</strong>
+        <span>loaves max per pickup date</span>
+      </aside>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="panel" aria-labelledby="dates-heading">
+      <div class="section-row">
+        <div>
+          <p class="step">Step 1</p>
+          <h2 id="dates-heading">Choose a pickup date</h2>
+        </div>
+      </div>
+      <div id="date-list" class="date-grid"></div>
+      <p id="date-status" class="muted" role="status">Loading available dates...</p>
+    </section>
+
+    <section class="panel" id="menu-section" aria-labelledby="menu-heading" hidden>
+      <div class="section-row">
+        <div>
+          <p class="step">Step 2</p>
+          <h2 id="menu-heading">Choose your bread</h2>
+          <p id="capacity-message" class="muted"></p>
+        </div>
+        <div class="capacity-pill">
+          <span id="selected-count">0</span>
+          <span>selected</span>
+        </div>
+      </div>
+
+      <div id="product-list" class="product-grid"></div>
+
+      <div class="summary" aria-live="polite">
+        <div><strong>Order total</strong></div>
+        <div id="order-total">$0.00</div>
+      </div>
+    </section>
+
+    <section class="panel" id="customer-section" aria-labelledby="customer-heading" hidden>
+      <p class="step">Step 3</p>
+      <h2 id="customer-heading">Your information</h2>
+
+      <form id="order-form">
+        <div class="field-grid">
+          <label>
+            Name
+            <input id="customer-name" autocomplete="name" required />
+          </label>
+
+          <label>
+            Email
+            <input id="customer-email" type="email" autocomplete="email" required />
+          </label>
+
+          <label>
+            Phone
+            <input id="customer-phone" type="tel" autocomplete="tel" required />
+          </label>
+        </div>
+
+        <label>
+          Notes
+          <textarea
+            id="customer-notes"
+            rows="3"
+            placeholder="Optional allergies, timing notes, or pickup details"
+          ></textarea>
+        </label>
+
+        <fieldset>
+          <legend>Payment method</legend>
+          <div id="payment-choices" class="payment-grid"></div>
+          <p class="hint">Credit cards are not accepted on this site.</p>
+        </fieldset>
+
+        <p data-pickup-note class="pickup-note"></p>
+        <button id="submit-order" type="submit">Submit order</button>
+        <p id="form-message" class="message" role="status"></p>
+      </form>
+    </section>
+
+    <section class="panel success-panel" id="success-section" aria-labelledby="success-heading" hidden>
+      <p class="step">Order received</p>
+      <h2 id="success-heading">Your loaves are reserved</h2>
+      <div id="success-content"></div>
+      <p class="muted">
+        Please complete payment using the instructions above so the bakery can confirm your pickup.
+      </p>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="app.js"></script>
+</body>
+</html>
