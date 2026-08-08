@@ -11,7 +11,7 @@ const SUPABASE_URL = "https://qvxrbipxxlygmmecgjxf.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_-w4Ef_bqgM_l9bY00thSpg_xohk7e9M";
 
 const STORE_SETTINGS = {
-  bakeryName: "Jen's Home Baked Goods",
+  bakeryName: "Jeni's Home Baked Goods",
   intro:
     "Small-batch bread baked to order. Choose a future pickup date, reserve your loaves, then choose your payment option.",
   pickupNote: "Pickup address and timing details will be confirmed after your order is received.",
@@ -69,7 +69,6 @@ const el = {
   bakeryName: document.querySelector("[data-bakery-name]"),
   intro: document.querySelector("[data-store-intro]"),
   pickupNote: document.querySelector("[data-pickup-note]"),
-  dateCapacity: document.querySelector("[data-date-capacity]"),
   dateList: document.querySelector("#date-list"),
   dateStatus: document.querySelector("#date-status"),
   menuSection: document.querySelector("#menu-section"),
@@ -205,7 +204,6 @@ function applyStoreSettings() {
   el.bakeryName.textContent = STORE_SETTINGS.bakeryName;
   el.intro.textContent = STORE_SETTINGS.intro;
   el.pickupNote.textContent = STORE_SETTINGS.pickupNote;
-  el.dateCapacity.textContent = STORE_SETTINGS.maxLoavesPerDate;
 
   el.paymentChoices.innerHTML = Object.entries(STORE_SETTINGS.paymentOptions)
     .map(([value, option]) => `

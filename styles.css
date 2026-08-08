@@ -46,13 +46,6 @@ button {
   padding: 40px 0 28px;
 }
 
-.header-layout {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: end;
-  gap: 24px;
-}
-
 .eyebrow,
 .step {
   margin: 0 0 6px;
@@ -75,30 +68,6 @@ button {
   margin: 0;
   color: var(--muted);
   font-size: 1.05rem;
-}
-
-.capacity-note {
-  width: 190px;
-  min-height: 140px;
-  display: grid;
-  align-content: center;
-  gap: 4px;
-  padding: 18px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  box-shadow: var(--shadow);
-}
-
-.capacity-note strong {
-  color: var(--accent);
-  font-size: 3.25rem;
-  line-height: 1;
-}
-
-.capacity-note span {
-  color: var(--muted);
-  font-weight: 700;
 }
 
 .panel {
@@ -451,27 +420,15 @@ button[type="submit"]:disabled {
     padding-top: 28px;
   }
 
-  .header-layout,
   .section-row,
   .product-bottom {
     grid-template-columns: 1fr;
     align-items: stretch;
   }
 
-  .header-layout {
-    display: grid;
-  }
-
   .section-row,
   .product-bottom {
     display: grid;
-  }
-
-  .capacity-note {
-    width: 100%;
-    min-height: auto;
-    grid-template-columns: auto 1fr;
-    align-items: center;
   }
 
   .panel {
