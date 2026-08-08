@@ -25,7 +25,7 @@ create table if not exists public.orders (
   customer_email text not null,
   customer_phone text not null,
   notes text,
-  payment_method text not null check (payment_method in ('Venmo','Zelle','PayPal')),
+  payment_method text not null check (payment_method in ('Venmo','Zelle','PayPal','CashApp','CashAtPickup')),
   total_cents integer not null default 0,
   total_loaves integer not null check (total_loaves > 0),
   created_at timestamptz not null default now()
@@ -48,6 +48,13 @@ on public.orders (pickup_date_id);
 
 create index if not exists idx_order_items_order_id
 on public.order_items (order_id);
+
+alter table public.orders
+drop constraint if exists orders_payment_method_check;
+
+alter table public.orders
+add constraint orders_payment_method_check
+check (payment_method in ('Venmo','Zelle','PayPal','CashApp','CashAtPickup'));
 
 -- Public read-only view showing availability without exposing customer data.
 create or replace view public.pickup_date_status as
@@ -127,7 +134,7 @@ declare
   v_item jsonb;
   v_price integer;
 begin
-  if p_payment_method not in ('Venmo', 'Zelle', 'PayPal') then
+  if p_payment_method not in ('Venmo', 'Zelle', 'PayPal', 'CashApp', 'CashAtPickup') then
     raise exception 'Invalid payment method';
   end if;
 
@@ -158,11 +165,15 @@ begin
   from pickup_dates
   where id = p_pickup_date_id
     and is_open = true
-    and pickup_date > current_date + 2
+    and (now() at time zone 'America/Los_Angeles') < (
+      pickup_date
+      - (((extract(dow from pickup_date)::integer - 3 + 7) % 7) * interval '1 day')
+      + time '17:00'
+    )
   for update;
 
   if not found then
-    raise exception 'Pickup date is closed, past, or past the ordering cutoff';
+    raise exception 'Pickup date is closed, past, or past the Wednesday 5 PM ordering cutoff';
   end if;
 
   select coalesce(sum(total_loaves), 0)::integer

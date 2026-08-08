@@ -13,34 +13,37 @@ const SUPABASE_ANON_KEY = "sb_publishable_-w4Ef_bqgM_l9bY00thSpg_xohk7e9M";
 const STORE_SETTINGS = {
   bakeryName: "Jen's Home Baked Goods",
   intro:
-    "Small-batch bread baked to order. Choose a future pickup date, reserve your loaves, then pay with Venmo, Zelle, or PayPal.",
+    "Small-batch bread baked to order. Choose a future pickup date, reserve your loaves, then choose your payment option.",
   pickupNote: "Pickup address and timing details will be confirmed after your order is received.",
   maxLoavesPerDate: 14,
-  orderCutoffDaysBeforePickup: 2,
+  orderCutoffWeekday: 3, // 0 = Sunday, 3 = Wednesday.
+  orderCutoffHour: 17,
+  bakeryTimeZone: "America/Los_Angeles",
   paymentOptions: {
     Venmo: {
-      label: "Cash",
-      link: "Pay Cash in Person",
-      instructions: "Please provide exact cash, as change is not available."
-    },Venmo: {
       label: "Venmo",
       link: "https://venmo.com/u/Jeni-Hales",
       instructions: "Send payment by Venmo and include your order number in the note."
     },
     Zelle: {
       label: "Zelle",
-      link: "801-602-8443",
-      instructions: "Send payment by Zelle to your bakery email or phone. Add your order number in the memo."
+      link: "",
+      instructions: "Send payment by Zelle to 801-602-8443. Add your order number in the memo."
     },
     PayPal: {
       label: "PayPal",
-      link: "paypal.me/JeniHales",
+      link: "https://paypal.me/JeniHales",
       instructions: "Send payment by PayPal and include your order number in the note."
     },
     CashApp: {
       label: "CashApp",
       link: "https://cash.app/$JeniHales10",
       instructions: "Send payment by CashApp and include your order number in the note."
+    },
+    CashAtPickup: {
+      label: "Cash at Pickup",
+      link: "",
+      instructions: "Please bring exact cash at pickup, as change is not available."
     }
   }
 };
@@ -99,10 +102,47 @@ function localDateString(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
-function earliestOrderablePickupDate() {
-  const date = new Date();
-  date.setDate(date.getDate() + STORE_SETTINGS.orderCutoffDaysBeforePickup);
-  return localDateString(date);
+function bakeryDateTimeParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: STORE_SETTINGS.bakeryTimeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).formatToParts(date);
+
+  return Object.fromEntries(parts.map(part => [part.type, part.value]));
+}
+
+function comparableDateTime(parts) {
+  return Number(`${parts.year}${parts.month}${parts.day}${parts.hour}${parts.minute}`);
+}
+
+function cutoffForPickupDate(pickupDateString) {
+  const [year, month, day] = pickupDateString.split("-").map(Number);
+  const pickupDate = new Date(year, month - 1, day);
+  const daysSinceCutoff =
+    (pickupDate.getDay() - STORE_SETTINGS.orderCutoffWeekday + 7) % 7;
+
+  pickupDate.setDate(pickupDate.getDate() - daysSinceCutoff);
+
+  return {
+    year: String(pickupDate.getFullYear()),
+    month: String(pickupDate.getMonth() + 1).padStart(2, "0"),
+    day: String(pickupDate.getDate()).padStart(2, "0"),
+    hour: String(STORE_SETTINGS.orderCutoffHour).padStart(2, "0"),
+    minute: "00"
+  };
+}
+
+function isOrderablePickupDate(date) {
+  const remaining = remainingFor(date);
+  const now = comparableDateTime(bakeryDateTimeParts());
+  const cutoff = comparableDateTime(cutoffForPickupDate(date.pickup_date));
+
+  return date.is_open && remaining > 0 && now < cutoff;
 }
 
 function isPlaceholder(value) {
@@ -165,7 +205,7 @@ async function loadStore() {
       supabaseClient
         .from("pickup_date_status")
         .select("*")
-        .gt("pickup_date", earliestOrderablePickupDate())
+        .gte("pickup_date", localDateString())
         .eq("is_open", true)
         .order("pickup_date", { ascending: true }),
       supabaseClient
@@ -183,6 +223,7 @@ async function loadStore() {
   }
 
   state.dates = dates || [];
+  state.dates = state.dates.filter(isOrderablePickupDate);
   state.products = products || [];
 
   renderDates();
@@ -331,7 +372,7 @@ el.form.addEventListener("submit", async event => {
   const paymentMethod = document.querySelector('input[name="payment"]:checked')?.value;
 
   if (!paymentMethod) {
-    setMessage("Please choose Venmo, Zelle, or PayPal.", "error");
+    setMessage("Please choose a payment option.", "error");
     return;
   }
 
@@ -401,7 +442,7 @@ function showSuccess(result, paymentMethod) {
   el.successSection.hidden = false;
 
   const payment = STORE_SETTINGS.paymentOptions[paymentMethod];
-  const linkIsUsable = payment?.link && !isPlaceholder(payment.link);
+  const linkIsUsable = /^https?:\/\//.test(payment?.link || "");
   const paymentAction = linkIsUsable
     ? `<a class="payment-link" href="${payment.link}" target="_blank" rel="noopener">Open ${payment.label}</a>`
     : "";

@@ -5,11 +5,11 @@ Production-ready starter for a small bakery using GitHub Pages for the frontend 
 ## What it does
 
 - Shows only open future pickup dates.
-- Closes ordering 2 days before each pickup date.
+- Closes ordering the Wednesday at 5 PM before each pickup date.
 - Gives every pickup date its own capacity, defaulting to 14 total loaves.
 - Lets customers mix bread varieties while still counting against the same date capacity.
 - Prevents overselling with a Supabase transaction function that locks the selected pickup-date row before checking capacity.
-- Accepts Venmo, Zelle, and PayPal instructions only.
+- Accepts Venmo, Zelle, PayPal, CashApp, and Cash at Pickup instructions only.
 - Does not accept or process credit cards.
 - Keeps bakery name, intro text, pickup note, and payment links in one owner-friendly settings block in `app.js`.
 
@@ -52,7 +52,9 @@ const STORE_SETTINGS = {
   intro: "Small-batch bread baked to order...",
   pickupNote: "Pickup address and timing details...",
   maxLoavesPerDate: 14,
-  orderCutoffDaysBeforePickup: 2,
+  orderCutoffWeekday: 3,
+  orderCutoffHour: 17,
+  bakeryTimeZone: "America/Los_Angeles",
   paymentOptions: {
     Venmo: {
       link: "YOUR_VENMO_LINK",
@@ -65,6 +67,14 @@ const STORE_SETTINGS = {
     PayPal: {
       link: "YOUR_PAYPAL_LINK",
       instructions: "Send payment by PayPal..."
+    },
+    CashApp: {
+      link: "YOUR_CASHAPP_LINK",
+      instructions: "Send payment by CashApp..."
+    },
+    CashAtPickup: {
+      link: "",
+      instructions: "Please bring exact cash..."
     }
   }
 };
@@ -106,7 +116,7 @@ Each date tracks its own capacity. One date selling out does not affect another 
 
 To close ordering for a date, set `is_open` to `false`.
 
-Orders automatically close 2 days before each pickup date. For example, if pickup is Friday, the last orderable day is Tuesday; on Wednesday the date will no longer appear.
+Orders automatically close at 5 PM on the Wednesday before each pickup date. For a Friday pickup, customers can order until Wednesday at 4:59 PM; at 5:00 PM the date will no longer appear.
 
 ## 6. Deploy on GitHub Pages
 
