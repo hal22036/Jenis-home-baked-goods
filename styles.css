@@ -462,13 +462,15 @@ button[type="submit"]:hover,
 
 .checkout-note {
   margin: 0 0 18px;
-  padding: 14px 16px;
-  border: 1px solid rgba(46, 104, 71, 0.35);
+  padding: 16px 18px;
+  border: 2px solid #d69e00;
   border-radius: 8px;
-  background: rgba(46, 104, 71, 0.1);
-  color: var(--success);
-  font-size: 1.05rem;
-  font-weight: 800;
+  background: #ffd84d;
+  color: #111;
+  font-size: clamp(1.2rem, 3vw, 1.55rem);
+  font-weight: 900;
+  line-height: 1.25;
+  text-align: center;
 }
 
 .edit-payment summary {
