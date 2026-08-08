@@ -4,6 +4,10 @@ const SUPABASE_ANON_KEY = "sb_publishable_-w4Ef_bqgM_l9bY00thSpg_xohk7e9M";
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const message = document.querySelector("#invoice-message");
 const content = document.querySelector("#invoice-content");
+const PICKUP_WINDOW = "4-7 pm";
+const PICKUP_ADDRESS = "7140 Anchor Terrace St.";
+const GATE_CODE = "#7716";
+const CONTACT_PHONE = "801-602-8443";
 
 function money(cents) {
   return new Intl.NumberFormat("en-US", {
@@ -79,7 +83,7 @@ function renderInvoice(order) {
     <dl class="receipt invoice-receipt">
       <div><dt>Order code</dt><dd>${escapeHtml(order.order_code)}</dd></div>
       <div><dt>Order placed</dt><dd>${prettyDateTime(order.created_at)}</dd></div>
-      <div><dt>Pickup</dt><dd>${prettyDate(order.pickup_date)}, 4-7 pm</dd></div>
+      <div><dt>Pickup</dt><dd>${prettyDate(order.pickup_date)}, ${PICKUP_WINDOW}</dd></div>
       <div><dt>Name</dt><dd>${escapeHtml(order.customer_name)}</dd></div>
       <div><dt>Phone</dt><dd>${escapeHtml(order.customer_phone)}</dd></div>
       ${order.customer_email ? `<div><dt>Email</dt><dd>${escapeHtml(order.customer_email)}</dd></div>` : ""}
@@ -103,6 +107,16 @@ function renderInvoice(order) {
     <div class="summary">
       <strong>Total</strong>
       <strong>${money(order.total_cents)}</strong>
+    </div>
+
+    <div class="pickup-details">
+      <h3>Pickup details</h3>
+      <p>Pickup is on ${prettyDate(order.pickup_date)} between ${PICKUP_WINDOW}.</p>
+      <p>
+        Address: ${PICKUP_ADDRESS}<br>
+        Gate Code: ${GATE_CODE}<br>
+        Please call/text with any questions: ${CONTACT_PHONE}.
+      </p>
     </div>
   `;
 
