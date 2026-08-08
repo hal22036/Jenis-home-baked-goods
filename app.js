@@ -222,9 +222,9 @@ function inferredGroupFor(product) {
 
   if (dashedName) return dashedName[1].trim();
 
-  const sizedName = name.match(/^(.+?)\s+(\d+\s*(?:oz|ounce|ounces).*)$/i);
+  const sizedName = splitSizedName(name);
 
-  if (sizedName) return sizedName[1].trim();
+  if (sizedName) return sizedName.groupName;
 
   return "";
 }
@@ -262,11 +262,26 @@ function optionLabelFor(product) {
 
   if (dashedName) return dashedName[2].trim();
 
-  const sizedName = name.match(/^(.+?)\s+(\d+\s*(?:oz|ounce|ounces).*)$/i);
+  const sizedName = splitSizedName(name);
 
-  if (sizedName) return sizedName[2].trim();
+  if (sizedName) return sizedName.optionLabel;
 
   return name;
+}
+
+function splitSizedName(name) {
+  const parts = cleanText(name).split(/\s+/);
+  const sizeIndex = parts.findIndex(part => /^\d+$/.test(part));
+  const unit = parts[sizeIndex + 1]?.toLowerCase();
+
+  if (sizeIndex <= 0 || !["oz", "ounce", "ounces"].includes(unit)) {
+    return null;
+  }
+
+  return {
+    groupName: parts.slice(0, sizeIndex).join(" "),
+    optionLabel: parts.slice(sizeIndex).join(" ")
+  };
 }
 
 function imageUrlFor(products) {
@@ -530,13 +545,15 @@ function renderProductCard(products) {
         ${sortedProducts.map(product => `
           <div class="option-row">
             <strong>${optionLabelFor(product)}</strong>
-            <div class="quantity" aria-label="${displayNameFor(product)} quantity">
-              <button type="button" data-action="minus" data-product-id="${product.id}" aria-label="Remove one ${displayNameFor(product)}">-</button>
-              <span data-qty="${product.id}">${state.quantities[product.id]}</span>
-              <button type="button" data-action="plus" data-product-id="${product.id}" aria-label="Add one ${displayNameFor(product)}">+</button>
+            <div class="option-controls">
+              <div class="quantity" aria-label="${displayNameFor(product)} quantity">
+                <button type="button" data-action="minus" data-product-id="${product.id}" aria-label="Remove one ${displayNameFor(product)}">-</button>
+                <span data-qty="${product.id}">${state.quantities[product.id]}</span>
+                <button type="button" data-action="plus" data-product-id="${product.id}" aria-label="Add one ${displayNameFor(product)}">+</button>
+              </div>
+              <span class="option-price">${money(product.price_cents)}</span>
+              <span class="option-subtotal">${money(itemSubtotalCents(product))}</span>
             </div>
-            <span>${money(product.price_cents)}</span>
-            <span>${money(itemSubtotalCents(product))}</span>
           </div>
         `).join("")}
       </div>

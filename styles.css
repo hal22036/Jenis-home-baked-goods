@@ -245,7 +245,7 @@ h2 {
 .option-table-head,
 .option-row {
   display: grid;
-  grid-template-columns: minmax(120px, 1fr) auto auto auto;
+  grid-template-columns: minmax(120px, 1fr) minmax(260px, auto);
   align-items: center;
   gap: 12px;
 }
@@ -259,6 +259,20 @@ h2 {
 .option-row {
   padding-top: 8px;
   border-top: 1px solid var(--border);
+}
+
+.option-controls {
+  display: grid;
+  grid-template-columns: auto minmax(58px, auto) minmax(66px, auto);
+  align-items: center;
+  justify-content: end;
+  gap: 12px;
+}
+
+.option-price,
+.option-subtotal {
+  white-space: nowrap;
+  text-align: right;
 }
 
 .card-subtotal {
@@ -629,6 +643,16 @@ button[type="submit"]:disabled {
   .option-row {
     grid-template-columns: 1fr;
     gap: 8px;
+  }
+
+  .option-controls {
+    grid-template-columns: 1fr;
+    justify-content: stretch;
+  }
+
+  .option-price,
+  .option-subtotal {
+    text-align: left;
   }
 
   .receipt dd {
