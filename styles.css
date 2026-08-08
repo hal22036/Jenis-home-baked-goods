@@ -186,9 +186,10 @@ h2 {
 }
 
 .product-image {
-  width: 100%;
-  aspect-ratio: 4 / 3;
+  width: min(100%, 180px);
+  height: 120px;
   display: block;
+  justify-self: center;
   object-fit: cover;
   border-radius: 8px;
   background: var(--surface-soft);
@@ -600,6 +601,11 @@ button[type="submit"]:disabled {
 
   .group-subtotal {
     text-align: left;
+  }
+
+  .product-image {
+    width: min(100%, 150px);
+    height: 100px;
   }
 }
 
