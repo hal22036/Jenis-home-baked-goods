@@ -7,8 +7,8 @@
   Never put a Supabase service_role key or private bank credentials in this file.
 */
 
-const SUPABASE_URL = "YOUR_SUPABASE_URL";
-const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+const SUPABASE_URL = "https://qvxrbipxxlygmmecgjxf.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_-w4Ef_bqgM_l9bY00thSpg_xohk7e9M";
 
 const STORE_SETTINGS = {
   bakeryName: "Jen's Home Baked Goods",
