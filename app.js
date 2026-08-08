@@ -66,7 +66,6 @@ const state = {
 };
 
 const el = {
-  bakeryName: document.querySelector("[data-bakery-name]"),
   intro: document.querySelector("[data-store-intro]"),
   pickupNote: document.querySelector("[data-pickup-note]"),
   dateList: document.querySelector("#date-list"),
@@ -201,7 +200,6 @@ function setMessage(message = "", type = "") {
 
 function applyStoreSettings() {
   document.title = `${STORE_SETTINGS.bakeryName} | Bread Orders`;
-  el.bakeryName.textContent = STORE_SETTINGS.bakeryName;
   el.intro.textContent = STORE_SETTINGS.intro;
   el.pickupNote.textContent = STORE_SETTINGS.pickupNote;
 
