@@ -180,6 +180,8 @@ create policy "Anyone can read pickup dates"
 on public.pickup_dates for select
 using (true);
 
+drop policy if exists "Admins can read admin users" on public.admin_users;
+
 drop function if exists public.is_admin();
 
 create or replace function public.is_admin()
@@ -195,7 +197,6 @@ as $$
   );
 $$;
 
-drop policy if exists "Admins can read admin users" on public.admin_users;
 create policy "Admins can read admin users"
 on public.admin_users for select
 using (public.is_admin());
@@ -544,7 +545,7 @@ create or replace function public.admin_save_pickup_date(
   p_capacity integer,
   p_is_open boolean
 )
-returns table(id uuid, pickup_date date, capacity integer, is_open boolean)
+returns table(saved_id uuid, saved_pickup_date date, saved_capacity integer, saved_is_open boolean)
 language plpgsql
 security definer
 set search_path = public
@@ -565,21 +566,21 @@ begin
   end if;
 
   if p_id is null then
-    insert into pickup_dates (pickup_date, capacity, is_open)
+    insert into public.pickup_dates (pickup_date, capacity, is_open)
     values (p_pickup_date, p_capacity, p_is_open)
     on conflict on constraint pickup_dates_pickup_date_key
     do update set
       capacity = excluded.capacity,
       is_open = excluded.is_open
-    returning pickup_dates.id into v_id;
+    returning id into v_id;
   else
-    update pickup_dates
+    update public.pickup_dates as d
     set
       pickup_date = p_pickup_date,
       capacity = p_capacity,
       is_open = p_is_open
-    where pickup_dates.id = p_id
-    returning pickup_dates.id into v_id;
+    where d.id = p_id
+    returning d.id into v_id;
   end if;
 
   if v_id is null then
@@ -588,7 +589,7 @@ begin
 
   return query
   select d.id, d.pickup_date, d.capacity, d.is_open
-  from pickup_dates d
+  from public.pickup_dates d
   where d.id = v_id;
 end;
 $$;
