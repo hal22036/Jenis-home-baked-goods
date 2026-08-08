@@ -105,6 +105,8 @@ Edit:
 - `price_cents`
 - `capacity_units`
 - `category`
+- `display_group`
+- `option_label`
 - `active`
 - `sort_order`
 
@@ -114,6 +116,8 @@ Prices are stored in cents:
 - `$12.50` = `1250`
 
 Set `active` to `false` to hide a bread without deleting it.
+
+The storefront alphabetizes items inside each category by product name or `display_group`. Grouped choices are alphabetized by `option_label`, so `sort_order` can be left alone unless you want it for your own notes.
 
 Use `capacity_units` to decide whether a product counts against pickup capacity:
 
@@ -127,6 +131,20 @@ Use `category` to group the order screen. Built-in category order:
 - `Savory`
 - `Turn Up the Heat`
 - `Other Delicious Treats`
+
+Use `display_group` and `option_label` when several product rows should appear in one card with separate choices:
+
+| name | display_group | option_label | price_cents | capacity_units | category |
+|---|---|---|---:|---:|---|
+| Honey Butter - 2 oz | Honey Butter | 2 oz Container | 150 | 0 | Other Delicious Treats |
+| Honey Butter - 4 oz | Honey Butter | 4 oz Container | 300 | 0 | Other Delicious Treats |
+| Honey Butter - 16 oz | Honey Butter | 16 oz Container | 1200 | 0 | Other Delicious Treats |
+| Granola - Plain | Homemade Granola | Plain | 1200 | 0 | Other Delicious Treats |
+| Granola - Craisins | Homemade Granola | Craisins | 1400 | 0 | Other Delicious Treats |
+
+Each option is still its own product row, so it can have its own price. The storefront groups rows with the same `display_group` into one card.
+
+For the most predictable setup, fill in `display_group` and `option_label`. The storefront can also infer simple groups from names like `Granola - Plain` or `Honey Butter 2 oz`, but the columns are easier to maintain.
 
 ## 5. Add Pickup Dates
 

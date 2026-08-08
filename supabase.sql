@@ -9,6 +9,8 @@ create table if not exists public.products (
   price_cents integer not null check (price_cents >= 0),
   capacity_units integer not null default 1 check (capacity_units >= 0),
   category text not null default 'Everyday',
+  display_group text,
+  option_label text,
   active boolean not null default true,
   sort_order integer not null default 0
 );
@@ -91,6 +93,12 @@ alter table public.products
 add column if not exists category text not null default 'Everyday';
 
 alter table public.products
+add column if not exists display_group text;
+
+alter table public.products
+add column if not exists option_label text;
+
+alter table public.products
 drop constraint if exists products_capacity_units_check;
 
 alter table public.products
@@ -148,6 +156,8 @@ group by d.id, d.pickup_date, d.capacity, d.is_open;
 --   price_cents,
 --   capacity_units,
 --   category,
+--   display_group,
+--   option_label,
 --   sort_order
 -- )
 -- values (
@@ -156,6 +166,8 @@ group by d.id, d.pickup_date, d.capacity, d.is_open;
 --   1000,
 --   1,
 --   'Everyday',
+--   null,
+--   null,
 --   1
 -- )
 -- on conflict do nothing;
@@ -462,9 +474,11 @@ begin
           'quantity', oi.quantity,
           'unit_price_cents', oi.unit_price_cents,
           'capacity_units', p.capacity_units,
-          'category', p.category
+          'category', p.category,
+          'display_group', p.display_group,
+          'option_label', p.option_label
         )
-        order by p.sort_order, p.name
+        order by coalesce(p.display_group, p.name), coalesce(p.option_label, p.name), p.name
       ) filter (where oi.id is not null),
       '[]'::jsonb
     ) as items

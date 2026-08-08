@@ -148,7 +148,7 @@ function renderOrders() {
       <div class="admin-items">
         ${(order.items || []).map(item => `
           <div>
-            <span>${item.quantity}x ${item.name}</span>
+            <span>${item.quantity}x ${adminItemName(item)}</span>
             <span>${money(item.quantity * item.unit_price_cents)}</span>
           </div>
         `).join("")}
@@ -205,6 +205,14 @@ function paymentLabel(value) {
     CashApp: "CashApp",
     CashAtPickup: "Cash at Pickup"
   }[value] || value;
+}
+
+function adminItemName(item) {
+  if (item.display_group && item.option_label) {
+    return `${item.display_group} - ${item.option_label}`;
+  }
+
+  return item.name;
 }
 
 async function saveOrderStatus(event) {

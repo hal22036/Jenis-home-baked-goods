@@ -196,6 +196,79 @@ function categorySortIndex(category) {
   return index === -1 ? STORE_SETTINGS.categoryOrder.length : index;
 }
 
+function compareText(a = "", b = "") {
+  return a.localeCompare(b, undefined, { sensitivity: "base" });
+}
+
+function cleanText(value) {
+  return String(value || "").trim();
+}
+
+function explicitGroupFor(product) {
+  return cleanText(product.display_group);
+}
+
+function inferredGroupFor(product) {
+  const name = cleanText(product.name);
+  const dashedName = name.match(/^(.+?)\s+-\s+(.+)$/);
+
+  if (dashedName) return dashedName[1].trim();
+
+  const sizedName = name.match(/^(.+?)\s+(\d+\s*(?:oz|ounce|ounces).*)$/i);
+
+  if (sizedName) return sizedName[1].trim();
+
+  return "";
+}
+
+function groupNameFor(product) {
+  return explicitGroupFor(product) || inferredGroupFor(product);
+}
+
+function cardKeyFor(product) {
+  const groupName = groupNameFor(product);
+  return groupName ? groupName.toLocaleLowerCase() : product.id;
+}
+
+function cardTitleFor(product) {
+  return groupNameFor(product) || cleanText(product.name);
+}
+
+function displayNameFor(product) {
+  const groupName = groupNameFor(product);
+  const optionLabel = optionLabelFor(product);
+
+  if (groupName && optionLabel && optionLabel !== cleanText(product.name)) {
+    return `${groupName} - ${optionLabel}`;
+  }
+
+  return cleanText(product.name);
+}
+
+function optionLabelFor(product) {
+  const explicitOption = cleanText(product.option_label);
+  if (explicitOption) return explicitOption;
+
+  const name = cleanText(product.name);
+  const dashedName = name.match(/^(.+?)\s+-\s+(.+)$/);
+
+  if (dashedName) return dashedName[2].trim();
+
+  const sizedName = name.match(/^(.+?)\s+(\d+\s*(?:oz|ounce|ounces).*)$/i);
+
+  if (sizedName) return sizedName[2].trim();
+
+  return name;
+}
+
+function itemSubtotalCents(product) {
+  return (state.quantities[product.id] || 0) * product.price_cents;
+}
+
+function cardSubtotalCents(products) {
+  return products.reduce((sum, product) => sum + itemSubtotalCents(product), 0);
+}
+
 function remainingFor(date) {
   if (!date) return 0;
   return Math.max(date.capacity - date.ordered_count, 0);
@@ -253,7 +326,7 @@ async function loadStore() {
         .select("*")
         .eq("active", true)
         .order("category", { ascending: true })
-        .order("sort_order", { ascending: true })
+        .order("name", { ascending: true })
     ]);
 
   if (dateError || productError) {
@@ -329,7 +402,12 @@ function renderProducts() {
         categorySortIndex(categoryFor(a)) - categorySortIndex(categoryFor(b));
 
       if (categoryDifference !== 0) return categoryDifference;
-      return a.sort_order - b.sort_order;
+
+      return (
+        compareText(categoryFor(a), categoryFor(b)) ||
+        compareText(cardTitleFor(a), cardTitleFor(b)) ||
+        compareText(optionLabelFor(a), optionLabelFor(b))
+      );
     })
     .reduce((groups, product) => {
       const category = categoryFor(product);
@@ -350,74 +428,138 @@ function renderProducts() {
 
     const categoryGrid = categorySection.querySelector(".category-grid");
 
-    products.forEach(product => {
-    state.quantities[product.id] = state.quantities[product.id] || 0;
+    const productCards = products.reduce((cards, product) => {
+      const key = cardKeyFor(product);
+      if (!cards.has(key)) cards.set(key, []);
+      cards.get(key).push(product);
+      return cards;
+    }, new Map());
 
-    const card = document.createElement("article");
-    card.className = "product";
+    [...productCards.values()]
+      .sort((a, b) => compareText(cardTitleFor(a[0]), cardTitleFor(b[0])))
+      .forEach(cardProducts => {
+        cardProducts.forEach(product => {
+          state.quantities[product.id] = state.quantities[product.id] || 0;
+        });
 
-    card.innerHTML = `
-      <div>
-        <h3>${product.name}</h3>
-        <p>${product.description || ""}</p>
-      </div>
-      <div class="product-bottom">
-        <strong>${money(product.price_cents)}</strong>
-        <div class="quantity" aria-label="${product.name} quantity">
-          <button type="button" data-action="minus" aria-label="Remove one ${product.name}">-</button>
-          <span data-qty>0</span>
-          <button type="button" data-action="plus" aria-label="Add one ${product.name}">+</button>
-        </div>
-      </div>
-    `;
-
-    const qtyEl = card.querySelector("[data-qty]");
-    const minusButton = card.querySelector('[data-action="minus"]');
-    const plusButton = card.querySelector('[data-action="plus"]');
-
-    function syncQuantity() {
-      qtyEl.textContent = state.quantities[product.id];
-      minusButton.disabled = state.quantities[product.id] === 0;
-      plusButton.disabled =
-        capacityUnitsFor(product) > 0 &&
-        selectedCapacityUnits() + capacityUnitsFor(product) > remainingForSelectedDate();
-    }
-
-    minusButton.addEventListener("click", () => {
-      if (state.quantities[product.id] > 0) {
-        state.quantities[product.id]--;
-        updateSummary();
-        renderProducts();
-      }
-    });
-
-    plusButton.addEventListener("click", () => {
-      const remaining = remainingForSelectedDate();
-      const productCapacity = capacityUnitsFor(product);
-
-      if (
-        productCapacity > 0 &&
-        selectedCapacityUnits() + productCapacity > remaining
-      ) {
-        setMessage(
-          `Only ${remaining} loaf spot${remaining === 1 ? "" : "s"} remain for this pickup date.`,
-          "error"
-        );
-        return;
-      }
-
-      state.quantities[product.id]++;
-      setMessage();
-      updateSummary();
-      renderProducts();
-    });
-
-    syncQuantity();
-    categoryGrid.appendChild(card);
-    });
+        categoryGrid.appendChild(renderProductCard(cardProducts));
+      });
 
     el.productList.appendChild(categorySection);
   });
+}
+
+function renderProductCard(products) {
+  const card = document.createElement("article");
+  const sortedProducts = products
+    .slice()
+    .sort((a, b) => compareText(optionLabelFor(a), optionLabelFor(b)));
+  const primaryProduct = sortedProducts[0];
+  const groupName = groupNameFor(primaryProduct);
+  const isGrouped = products.length > 1 || Boolean(groupName);
+  card.className = `product ${isGrouped ? "option-product" : ""}`;
+
+  if (!isGrouped) {
+    card.innerHTML = `
+      <div>
+        <h3>${primaryProduct.name}</h3>
+        <p>${primaryProduct.description || ""}</p>
+      </div>
+      <div class="product-bottom">
+        <div>
+          <strong>${money(primaryProduct.price_cents)}</strong>
+          <span class="item-subtotal">Item subtotal: ${money(itemSubtotalCents(primaryProduct))}</span>
+        </div>
+        <div class="quantity" aria-label="${primaryProduct.name} quantity">
+          <button type="button" data-action="minus" data-product-id="${primaryProduct.id}" aria-label="Remove one ${primaryProduct.name}">-</button>
+          <span data-qty="${primaryProduct.id}">${state.quantities[primaryProduct.id]}</span>
+          <button type="button" data-action="plus" data-product-id="${primaryProduct.id}" aria-label="Add one ${primaryProduct.name}">+</button>
+        </div>
+      </div>
+    `;
+  } else {
+    card.innerHTML = `
+      <div class="option-card-heading">
+        <div>
+          <h3>${groupName || primaryProduct.name}</h3>
+          <p>${primaryProduct.description || ""}</p>
+        </div>
+        <div class="group-subtotal">
+          <span>Item subtotal</span>
+          <strong>${money(cardSubtotalCents(sortedProducts))}</strong>
+        </div>
+      </div>
+      <div class="option-table">
+        <div class="option-table-head">
+          <span>Option</span>
+          <span>Quantity</span>
+          <span>Price</span>
+          <span>Subtotal</span>
+        </div>
+        ${sortedProducts.map(product => `
+          <div class="option-row">
+            <strong>${optionLabelFor(product)}</strong>
+            <div class="quantity" aria-label="${displayNameFor(product)} quantity">
+              <button type="button" data-action="minus" data-product-id="${product.id}" aria-label="Remove one ${displayNameFor(product)}">-</button>
+              <span data-qty="${product.id}">${state.quantities[product.id]}</span>
+              <button type="button" data-action="plus" data-product-id="${product.id}" aria-label="Add one ${displayNameFor(product)}">+</button>
+            </div>
+            <span>${money(product.price_cents)}</span>
+            <span>${money(itemSubtotalCents(product))}</span>
+          </div>
+        `).join("")}
+      </div>
+      <div class="card-subtotal">
+        <span>Item subtotal</span>
+        <strong>${money(cardSubtotalCents(sortedProducts))}</strong>
+      </div>
+    `;
+  }
+
+  card.querySelectorAll("[data-action]").forEach(button => {
+    const product = products.find(item => item.id === button.dataset.productId);
+    button.disabled = isQuantityButtonDisabled(button.dataset.action, product);
+    button.addEventListener("click", () => updateProductQuantity(button.dataset.action, product));
+  });
+
+  return card;
+}
+
+function isQuantityButtonDisabled(action, product) {
+  if (action === "minus") return state.quantities[product.id] === 0;
+
+  return (
+    capacityUnitsFor(product) > 0 &&
+    selectedCapacityUnits() + capacityUnitsFor(product) > remainingForSelectedDate()
+  );
+}
+
+function updateProductQuantity(action, product) {
+  if (action === "minus") {
+    if (state.quantities[product.id] > 0) {
+      state.quantities[product.id]--;
+    }
+  } else {
+    const remaining = remainingForSelectedDate();
+    const productCapacity = capacityUnitsFor(product);
+
+    if (
+      productCapacity > 0 &&
+      selectedCapacityUnits() + productCapacity > remaining
+    ) {
+      setMessage(
+        `Only ${remaining} loaf spot${remaining === 1 ? "" : "s"} remain for this pickup date.`,
+        "error"
+      );
+      return;
+    }
+
+    state.quantities[product.id]++;
+    setMessage();
+  }
+
+  updateSummary();
+  renderProducts();
 }
 
 function updateSummary() {
@@ -465,11 +607,12 @@ function selectedItemsWithDetails() {
     .filter(product => (state.quantities[product.id] || 0) > 0)
     .map(product => ({
       product_id: product.id,
-      name: product.name,
+      name: displayNameFor(product),
       quantity: state.quantities[product.id],
       price_cents: product.price_cents,
       capacity_units: capacityUnitsFor(product)
-    }));
+    }))
+    .sort((a, b) => compareText(a.name, b.name));
 }
 
 function customerDetails() {
