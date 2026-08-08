@@ -585,7 +585,6 @@ async function saveSuccessPaymentMethod() {
   message.className = "message";
 
   const { error } = await supabaseClient.rpc("update_order_payment_method", {
-    p_order_id: state.lastOrder.order_id,
     p_order_code: state.lastOrder.order_code,
     p_payment_method: paymentMethod
   });
@@ -594,7 +593,7 @@ async function saveSuccessPaymentMethod() {
 
   if (error) {
     console.error(error);
-    message.textContent = "Could not update payment option. Please try again.";
+    message.textContent = `Could not update payment option: ${error.message}`;
     message.className = "message error";
     return;
   }

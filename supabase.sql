@@ -152,6 +152,7 @@ using (true);
 
 drop function if exists public.place_order(uuid,text,text,text,text,text,jsonb);
 drop function if exists public.update_order_payment_method(uuid,text,text);
+drop function if exists public.update_order_payment_method(text,text);
 
 create or replace function public.place_order(
   p_pickup_date_id uuid,
@@ -313,7 +314,6 @@ end;
 $$;
 
 create or replace function public.update_order_payment_method(
-  p_order_id uuid,
   p_order_code text,
   p_payment_method text
 )
@@ -329,8 +329,7 @@ begin
 
   update orders
   set payment_method = p_payment_method
-  where id = p_order_id
-    and orders.order_code = p_order_code;
+  where orders.order_code = upper(trim(p_order_code));
 
   if not found then
     raise exception 'Order not found';
@@ -339,15 +338,15 @@ begin
   return query
   select orders.id, orders.order_code, orders.payment_method
   from orders
-  where id = p_order_id;
+  where orders.order_code = upper(trim(p_order_code));
 end;
 $$;
 
 revoke all on function public.place_order(uuid,text,text,text,text,text,jsonb) from public;
 grant execute on function public.place_order(uuid,text,text,text,text,text,jsonb) to anon, authenticated;
 
-revoke all on function public.update_order_payment_method(uuid,text,text) from public;
-grant execute on function public.update_order_payment_method(uuid,text,text) to anon, authenticated;
+revoke all on function public.update_order_payment_method(text,text) from public;
+grant execute on function public.update_order_payment_method(text,text) to anon, authenticated;
 
 grant select on public.products to anon, authenticated;
 grant select on public.pickup_dates to anon, authenticated;
