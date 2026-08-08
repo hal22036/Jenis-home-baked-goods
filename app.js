@@ -683,8 +683,18 @@ function customerDetails() {
   };
 }
 
+function hasValidPaymentMethod(paymentMethod) {
+  return Boolean(paymentMethod && STORE_SETTINGS.paymentOptions[paymentMethod]);
+}
+
 function showReview() {
   const details = customerDetails();
+
+  if (!hasValidPaymentMethod(details.paymentMethod)) {
+    setMessage("Please choose a payment option.", "error");
+    return;
+  }
+
   const payment = STORE_SETTINGS.paymentOptions[details.paymentMethod];
   const items = selectedItemsWithDetails();
 
@@ -739,6 +749,15 @@ async function submitReviewedOrder() {
   if (state.isSubmitting) return;
 
   const details = customerDetails();
+
+  if (!hasValidPaymentMethod(details.paymentMethod)) {
+    setMessage("Please choose a payment option before placing your order.", "error");
+    el.reviewSection.hidden = true;
+    el.customerSection.hidden = false;
+    window.scrollTo({ top: el.customerSection.offsetTop - 16, behavior: "smooth" });
+    return;
+  }
+
   const items = state.products
     .filter(product => (state.quantities[product.id] || 0) > 0)
     .map(product => ({
