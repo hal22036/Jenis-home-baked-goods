@@ -778,6 +778,11 @@ button[type="submit"]:disabled {
     grid-template-columns: 1fr;
   }
 
+  .category-grid {
+    grid-template-columns: 1fr;
+    grid-auto-rows: auto;
+  }
+
   .quantity {
     justify-content: end;
   }
@@ -787,8 +792,27 @@ button[type="submit"]:disabled {
   }
 
   .product-image {
-    width: min(100%, 180px);
-    height: 112px;
+    width: min(100%, 240px);
+    height: 150px;
+  }
+
+  .option-table-head {
+    display: none;
+  }
+
+  .option-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .option-controls {
+    grid-template-columns: auto auto auto;
+    justify-content: start;
+  }
+
+  .option-price,
+  .option-subtotal {
+    text-align: left;
   }
 }
 
@@ -802,23 +826,9 @@ button[type="submit"]:disabled {
     gap: 2px;
   }
 
-  .option-table-head {
-    display: none;
-  }
-
-  .option-row {
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
-
   .option-controls {
     grid-template-columns: 1fr;
     justify-content: stretch;
-  }
-
-  .option-price,
-  .option-subtotal {
-    text-align: left;
   }
 
   .receipt dd {
