@@ -47,12 +47,27 @@ button {
   text-align: center;
 }
 
+.header-layout {
+  display: grid;
+  gap: 24px;
+}
+
 .site-logo {
   width: min(220px, 58vw);
   height: auto;
   display: block;
   margin: 0 auto 18px;
   filter: drop-shadow(0 12px 22px rgba(74, 47, 24, 0.12));
+}
+
+.hero-image {
+  width: 100%;
+  max-height: 390px;
+  object-fit: cover;
+  object-position: center 52%;
+  display: block;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
 }
 
 .eyebrow,
@@ -427,6 +442,14 @@ button[type="submit"]:disabled {
 
   .site-header {
     padding-top: 28px;
+  }
+
+  .site-logo {
+    width: min(180px, 54vw);
+  }
+
+  .hero-image {
+    max-height: 260px;
   }
 
   .section-row,
