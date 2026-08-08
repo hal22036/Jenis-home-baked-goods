@@ -111,7 +111,9 @@ h2 {
 }
 
 .category-grid {
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 250px));
+  grid-auto-rows: 1fr;
+  align-items: stretch;
 }
 
 .product-grid {
@@ -171,7 +173,8 @@ h2 {
 }
 
 .product {
-  min-height: 190px;
+  width: 100%;
+  min-height: 100%;
   display: grid;
   align-content: space-between;
   gap: 18px;
@@ -186,8 +189,8 @@ h2 {
 }
 
 .product-image {
-  width: min(100%, 180px);
-  height: 120px;
+  width: 132px;
+  height: 88px;
   display: block;
   justify-self: center;
   object-fit: cover;
@@ -604,8 +607,8 @@ button[type="submit"]:disabled {
   }
 
   .product-image {
-    width: min(100%, 150px);
-    height: 100px;
+    width: 120px;
+    height: 80px;
   }
 }
 
