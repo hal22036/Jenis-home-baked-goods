@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bakery Admin | Jeni's Home Baked Goods</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="admin.css" />
+</head>
+<body>
+  <header class="site-header admin-header">
+    <div class="wrap">
+      <img class="site-logo admin-logo" src="assets/logo.png" alt="Jeni's Home Baked Goods logo" />
+      <p class="eyebrow">Owner tools</p>
+      <p>Review orders, mark payment and fulfillment, archive finished orders, and manage Friday pickup dates.</p>
+    </div>
+  </header>
+
+  <main class="wrap admin-shell">
+    <section class="panel" id="login-panel">
+      <h2>Admin sign in</h2>
+      <form id="admin-login-form">
+        <label>
+          Email
+          <input id="admin-email" type="email" autocomplete="email" required />
+        </label>
+        <label>
+          Password
+          <input id="admin-password" type="password" autocomplete="current-password" required />
+        </label>
+        <button type="submit">Sign in</button>
+        <p id="login-message" class="message" role="status"></p>
+      </form>
+    </section>
+
+    <section class="panel" id="admin-panel" hidden>
+      <div class="admin-toolbar">
+        <div>
+          <p class="step">Orders</p>
+          <h2>Bakery orders</h2>
+        </div>
+        <div class="toolbar-actions">
+          <label class="inline-check">
+            <input id="include-archived" type="checkbox" />
+            Show archived
+          </label>
+          <button class="secondary-button compact-button" type="button" id="refresh-orders">Refresh</button>
+          <button class="secondary-button compact-button" type="button" id="admin-sign-out">Sign out</button>
+        </div>
+      </div>
+      <p id="admin-message" class="message" role="status"></p>
+      <div id="orders-list" class="orders-list"></div>
+    </section>
+
+    <section class="panel" id="dates-panel" hidden>
+      <div class="admin-toolbar">
+        <div>
+          <p class="step">Pickup dates</p>
+          <h2>Manage Friday dates</h2>
+        </div>
+      </div>
+
+      <form id="pickup-date-form" class="date-admin-form">
+        <input id="pickup-date-id" type="hidden" />
+        <label>
+          Friday pickup date
+          <input id="pickup-date-input" type="date" required />
+        </label>
+        <label>
+          Capacity
+          <input id="pickup-capacity-input" type="number" min="1" value="14" required />
+        </label>
+        <label class="inline-check open-check">
+          <input id="pickup-open-input" type="checkbox" checked />
+          Open for orders
+        </label>
+        <button type="submit">Save pickup date</button>
+        <button class="secondary-button" type="button" id="clear-date-form">Clear form</button>
+      </form>
+
+      <p id="date-admin-message" class="message" role="status"></p>
+      <div id="pickup-dates-list" class="pickup-dates-list"></div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="admin.js"></script>
+</body>
+</html>

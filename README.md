@@ -21,6 +21,9 @@ Production-ready starter for a small bakery using GitHub Pages for the frontend 
 - `index.html` - static GitHub Pages page
 - `styles.css` - responsive design
 - `app.js` - Supabase connection, store settings, ordering flow
+- `admin.html` - owner order and pickup-date dashboard
+- `admin.js` - admin login, order status, archive, and pickup-date tools
+- `admin.css` - admin-only styles
 - `supabase.sql` - database tables, read policies, and safe order function
 
 ## 1. Create Supabase
@@ -154,6 +157,40 @@ Orders automatically close at 5 PM on the Wednesday before each pickup date. For
 6. Save.
 
 GitHub Pages will give you the public site URL.
+
+## 7. Set Up the Admin Page
+
+The admin page is available at:
+
+```text
+https://YOUR-GITHUB-USERNAME.github.io/YOUR-REPO/admin.html
+```
+
+It uses Supabase Auth plus an `admin_users` allow-list.
+
+1. Run the latest `supabase.sql`.
+2. In Supabase, go to Authentication -> Users.
+3. Add or invite your owner email address.
+4. Set a password for that user.
+5. In SQL Editor, add that same email to the admin allow-list:
+
+```sql
+insert into public.admin_users (email)
+values ('YOUR_EMAIL@example.com')
+on conflict (email) do nothing;
+```
+
+The admin page can:
+
+- view orders without opening Supabase
+- mark payment status as pending, paid, or refunded
+- mark fulfillment status as new, prepping, ready, fulfilled, or canceled
+- archive finished orders
+- add or edit Friday pickup dates
+- open or close pickup dates
+- change pickup-date capacity
+
+Use archive instead of delete so order history is not lost accidentally.
 
 ## Capacity Protection
 

@@ -42,6 +42,11 @@ create table if not exists public.order_items (
   unit_price_cents integer not null check (unit_price_cents >= 0)
 );
 
+create table if not exists public.admin_users (
+  email text primary key,
+  created_at timestamptz not null default now()
+);
+
 create index if not exists idx_pickup_dates_open_future
 on public.pickup_dates (pickup_date)
 where is_open = true;
@@ -51,6 +56,29 @@ on public.orders (pickup_date_id);
 
 create index if not exists idx_order_items_order_id
 on public.order_items (order_id);
+
+alter table public.orders
+add column if not exists payment_status text not null default 'pending';
+
+alter table public.orders
+add column if not exists fulfillment_status text not null default 'new';
+
+alter table public.orders
+add column if not exists archived boolean not null default false;
+
+alter table public.orders
+drop constraint if exists orders_payment_status_check;
+
+alter table public.orders
+add constraint orders_payment_status_check
+check (payment_status in ('pending','paid','refunded'));
+
+alter table public.orders
+drop constraint if exists orders_fulfillment_status_check;
+
+alter table public.orders
+add constraint orders_fulfillment_status_check
+check (fulfillment_status in ('new','prepping','ready','fulfilled','canceled'));
 
 alter table public.products
 add column if not exists capacity_units integer not null default 1;
@@ -140,6 +168,7 @@ alter table public.products enable row level security;
 alter table public.pickup_dates enable row level security;
 alter table public.orders enable row level security;
 alter table public.order_items enable row level security;
+alter table public.admin_users enable row level security;
 
 drop policy if exists "Anyone can read active products" on public.products;
 create policy "Anyone can read active products"
@@ -151,12 +180,36 @@ create policy "Anyone can read pickup dates"
 on public.pickup_dates for select
 using (true);
 
+drop function if exists public.is_admin();
+
+create or replace function public.is_admin()
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.admin_users
+    where lower(email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+  );
+$$;
+
+drop policy if exists "Admins can read admin users" on public.admin_users;
+create policy "Admins can read admin users"
+on public.admin_users for select
+using (public.is_admin());
+
 -- The browser is NOT allowed to insert orders directly.
 -- Orders are created only through the function below.
 
 drop function if exists public.place_order(uuid,text,text,text,text,text,jsonb);
 drop function if exists public.update_order_payment_method(uuid,text,text);
 drop function if exists public.update_order_payment_method(text,text);
+drop function if exists public.admin_list_orders(boolean);
+drop function if exists public.admin_update_order_status(uuid,text,text,boolean);
+drop function if exists public.admin_list_pickup_dates();
+drop function if exists public.admin_save_pickup_date(uuid,date,integer,boolean);
 
 create or replace function public.place_order(
   p_pickup_date_id uuid,
@@ -346,11 +399,220 @@ begin
 end;
 $$;
 
+create or replace function public.admin_list_orders(
+  p_include_archived boolean default false
+)
+returns table(
+  order_id uuid,
+  order_code text,
+  pickup_date date,
+  customer_name text,
+  customer_email text,
+  customer_phone text,
+  notes text,
+  payment_method text,
+  payment_status text,
+  fulfillment_status text,
+  archived boolean,
+  total_cents integer,
+  total_loaves integer,
+  created_at timestamptz,
+  items jsonb
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Admin access required';
+  end if;
+
+  return query
+  select
+    o.id,
+    o.order_code,
+    d.pickup_date,
+    o.customer_name,
+    o.customer_email,
+    o.customer_phone,
+    o.notes,
+    o.payment_method,
+    o.payment_status,
+    o.fulfillment_status,
+    o.archived,
+    o.total_cents,
+    o.total_loaves,
+    o.created_at,
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'name', p.name,
+          'quantity', oi.quantity,
+          'unit_price_cents', oi.unit_price_cents,
+          'capacity_units', p.capacity_units,
+          'category', p.category
+        )
+        order by p.sort_order, p.name
+      ) filter (where oi.id is not null),
+      '[]'::jsonb
+    ) as items
+  from orders o
+  join pickup_dates d on d.id = o.pickup_date_id
+  left join order_items oi on oi.order_id = o.id
+  left join products p on p.id = oi.product_id
+  where p_include_archived or not o.archived
+  group by o.id, d.pickup_date
+  order by d.pickup_date asc, o.created_at asc;
+end;
+$$;
+
+create or replace function public.admin_update_order_status(
+  p_order_id uuid,
+  p_payment_status text,
+  p_fulfillment_status text,
+  p_archived boolean
+)
+returns table(order_id uuid, payment_status text, fulfillment_status text, archived boolean)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Admin access required';
+  end if;
+
+  if p_payment_status not in ('pending','paid','refunded') then
+    raise exception 'Invalid payment status';
+  end if;
+
+  if p_fulfillment_status not in ('new','prepping','ready','fulfilled','canceled') then
+    raise exception 'Invalid fulfillment status';
+  end if;
+
+  update orders
+  set
+    payment_status = p_payment_status,
+    fulfillment_status = p_fulfillment_status,
+    archived = p_archived
+  where id = p_order_id;
+
+  if not found then
+    raise exception 'Order not found';
+  end if;
+
+  return query
+  select o.id, o.payment_status, o.fulfillment_status, o.archived
+  from orders o
+  where o.id = p_order_id;
+end;
+$$;
+
+create or replace function public.admin_list_pickup_dates()
+returns table(
+  id uuid,
+  pickup_date date,
+  capacity integer,
+  is_open boolean,
+  ordered_count integer
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Admin access required';
+  end if;
+
+  return query
+  select
+    s.id,
+    s.pickup_date,
+    s.capacity,
+    s.is_open,
+    s.ordered_count
+  from pickup_date_status s
+  order by s.pickup_date asc;
+end;
+$$;
+
+create or replace function public.admin_save_pickup_date(
+  p_id uuid,
+  p_pickup_date date,
+  p_capacity integer,
+  p_is_open boolean
+)
+returns table(id uuid, pickup_date date, capacity integer, is_open boolean)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id uuid;
+begin
+  if not public.is_admin() then
+    raise exception 'Admin access required';
+  end if;
+
+  if p_capacity <= 0 then
+    raise exception 'Capacity must be greater than zero';
+  end if;
+
+  if extract(dow from p_pickup_date)::integer <> 5 then
+    raise exception 'Pickup date must be a Friday';
+  end if;
+
+  if p_id is null then
+    insert into pickup_dates (pickup_date, capacity, is_open)
+    values (p_pickup_date, p_capacity, p_is_open)
+    on conflict (pickup_date)
+    do update set
+      capacity = excluded.capacity,
+      is_open = excluded.is_open
+    returning pickup_dates.id into v_id;
+  else
+    update pickup_dates
+    set
+      pickup_date = p_pickup_date,
+      capacity = p_capacity,
+      is_open = p_is_open
+    where pickup_dates.id = p_id
+    returning pickup_dates.id into v_id;
+  end if;
+
+  if v_id is null then
+    raise exception 'Pickup date not found';
+  end if;
+
+  return query
+  select d.id, d.pickup_date, d.capacity, d.is_open
+  from pickup_dates d
+  where d.id = v_id;
+end;
+$$;
+
 revoke all on function public.place_order(uuid,text,text,text,text,text,jsonb) from public;
 grant execute on function public.place_order(uuid,text,text,text,text,text,jsonb) to anon, authenticated;
 
 revoke all on function public.update_order_payment_method(text,text) from public;
 grant execute on function public.update_order_payment_method(text,text) to anon, authenticated;
+
+revoke all on function public.is_admin() from public;
+grant execute on function public.is_admin() to authenticated;
+
+revoke all on function public.admin_list_orders(boolean) from public;
+grant execute on function public.admin_list_orders(boolean) to authenticated;
+
+revoke all on function public.admin_update_order_status(uuid,text,text,boolean) from public;
+grant execute on function public.admin_update_order_status(uuid,text,text,boolean) to authenticated;
+
+revoke all on function public.admin_list_pickup_dates() from public;
+grant execute on function public.admin_list_pickup_dates() to authenticated;
+
+revoke all on function public.admin_save_pickup_date(uuid,date,integer,boolean) from public;
+grant execute on function public.admin_save_pickup_date(uuid,date,integer,boolean) to authenticated;
 
 grant select on public.products to anon, authenticated;
 grant select on public.pickup_dates to anon, authenticated;

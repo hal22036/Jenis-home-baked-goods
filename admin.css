@@ -1,0 +1,149 @@
+.admin-header {
+  padding-bottom: 18px;
+}
+
+.admin-logo {
+  width: min(180px, 50vw);
+}
+
+.admin-shell {
+  padding-bottom: 32px;
+}
+
+.admin-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.inline-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.inline-check input {
+  width: auto;
+}
+
+.compact-button {
+  width: auto;
+  min-height: 42px;
+  margin: 0;
+  padding-inline: 14px;
+}
+
+.orders-list,
+.pickup-dates-list {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-order,
+.pickup-date-row {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fffdf9;
+}
+
+.admin-order.is-archived {
+  opacity: 0.72;
+}
+
+.order-heading,
+.pickup-date-row,
+.admin-items div {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.order-heading h3 {
+  margin-bottom: 4px;
+}
+
+.order-heading p,
+.pickup-date-row p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.admin-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.admin-details div {
+  display: grid;
+  gap: 2px;
+}
+
+.admin-details dt {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.admin-details dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+.admin-items {
+  display: grid;
+  gap: 8px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.admin-notes {
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.status-grid,
+.date-admin-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  align-items: end;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.archive-check,
+.open-check {
+  min-height: 48px;
+}
+
+@media (max-width: 760px) {
+  .admin-toolbar,
+  .pickup-date-row,
+  .order-heading,
+  .admin-items div {
+    display: grid;
+  }
+
+  .toolbar-actions,
+  .compact-button {
+    width: 100%;
+  }
+
+  .compact-button {
+    justify-content: center;
+  }
+}
