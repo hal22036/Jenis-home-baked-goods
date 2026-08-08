@@ -84,6 +84,7 @@ const el = {
   orderTotal: document.querySelector("#order-total"),
   form: document.querySelector("#order-form"),
   formMessage: document.querySelector("#form-message"),
+  customerPhone: document.querySelector("#customer-phone"),
   submit: document.querySelector("#submit-order"),
   reviewSection: document.querySelector("#review-section"),
   reviewContent: document.querySelector("#review-content"),
@@ -113,6 +114,23 @@ function prettyDate(dateString) {
     month: "short",
     day: "numeric"
   });
+}
+
+function phoneDigits(value) {
+  return String(value || "").replace(/\D/g, "").slice(0, 10);
+}
+
+function formatPhone(value) {
+  const digits = phoneDigits(value);
+
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
+function syncPhoneFormat() {
+  el.customerPhone.value = formatPhone(el.customerPhone.value);
 }
 
 function localDateString(date = new Date()) {
@@ -635,6 +653,9 @@ function updateSummary() {
   el.orderTotal.textContent = money(selectedTotalCents());
 }
 
+el.customerPhone.addEventListener("input", syncPhoneFormat);
+el.customerPhone.addEventListener("blur", syncPhoneFormat);
+
 el.form.addEventListener("submit", event => {
   event.preventDefault();
 
@@ -653,6 +674,14 @@ el.form.addEventListener("submit", event => {
   }
 
   const paymentMethod = document.querySelector('input[name="payment"]:checked')?.value;
+
+  syncPhoneFormat();
+
+  if (phoneDigits(el.customerPhone.value).length !== 10) {
+    setMessage("Please enter a 10-digit phone number.", "error");
+    el.customerPhone.focus();
+    return;
+  }
 
   if (!paymentMethod) {
     setMessage("Please choose a payment option.", "error");
@@ -679,7 +708,7 @@ function customerDetails() {
   return {
     name: document.querySelector("#customer-name").value.trim(),
     email: el.invoiceEmail.value.trim(),
-    phone: document.querySelector("#customer-phone").value.trim(),
+    phone: formatPhone(el.customerPhone.value),
     notes: document.querySelector("#customer-notes").value.trim(),
     paymentMethod: document.querySelector('input[name="payment"]:checked')?.value
   };

@@ -70,7 +70,15 @@
 
           <label>
             Phone
-            <input id="customer-phone" type="tel" autocomplete="tel" required />
+            <input
+              id="customer-phone"
+              type="tel"
+              autocomplete="tel"
+              inputmode="numeric"
+              placeholder="(000) 000-0000"
+              maxlength="14"
+              required
+            />
           </label>
         </div>
 
@@ -130,6 +138,6 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20260808-receipt-email"></script>
+  <script src="app.js?v=20260808-phone-format"></script>
 </body>
 </html>

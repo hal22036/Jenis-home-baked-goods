@@ -275,6 +275,10 @@ begin
     raise exception 'Customer name and phone are required';
   end if;
 
+  if length(regexp_replace(p_customer_phone, '\D', '', 'g')) <> 10 then
+    raise exception 'A 10-digit phone number is required';
+  end if;
+
   if coalesce(p_invoice_requested, false)
     and nullif(trim(coalesce(p_customer_email, '')), '') is null then
     raise exception 'Email is required when an invoice is requested';
