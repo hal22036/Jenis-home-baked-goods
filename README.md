@@ -107,6 +107,7 @@ Edit:
 - `category`
 - `display_group`
 - `option_label`
+- `image_url`
 - `active`
 - `sort_order`
 
@@ -118,6 +119,14 @@ Prices are stored in cents:
 Set `active` to `false` to hide a bread without deleting it.
 
 The storefront alphabetizes items inside each category by product name or `display_group`. Grouped choices are alphabetized by `option_label`, so `sort_order` can be left alone unless you want it for your own notes.
+
+Use `image_url` to show a product photo. Put the image file in the repository `assets` folder, commit it to GitHub, then enter a relative path like:
+
+```text
+assets/white-sourdough.jpg
+```
+
+For grouped products, use the same `image_url` on each option row if they should share one card photo.
 
 Use `capacity_units` to decide whether a product counts against pickup capacity:
 

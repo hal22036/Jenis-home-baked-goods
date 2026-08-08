@@ -204,6 +204,14 @@ function cleanText(value) {
   return String(value || "").trim();
 }
 
+function escapeAttribute(value) {
+  return cleanText(value)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 function explicitGroupFor(product) {
   return cleanText(product.display_group);
 }
@@ -259,6 +267,27 @@ function optionLabelFor(product) {
   if (sizedName) return sizedName[2].trim();
 
   return name;
+}
+
+function imageUrlFor(products) {
+  const productWithImage = products.find(product => cleanText(product.image_url));
+  return productWithImage ? cleanText(productWithImage.image_url) : "";
+}
+
+function productImageMarkup(products, altText) {
+  const imageUrl = imageUrlFor(products);
+
+  if (!imageUrl) return "";
+
+  return `
+    <img
+      class="product-image"
+      src="${escapeAttribute(imageUrl)}"
+      alt="${escapeAttribute(altText)}"
+      loading="lazy"
+      onerror="this.hidden=true"
+    />
+  `;
 }
 
 function itemSubtotalCents(product) {
@@ -461,6 +490,7 @@ function renderProductCard(products) {
 
   if (!isGrouped) {
     card.innerHTML = `
+      ${productImageMarkup([primaryProduct], primaryProduct.name)}
       <div>
         <h3>${primaryProduct.name}</h3>
         <p>${primaryProduct.description || ""}</p>
@@ -479,6 +509,7 @@ function renderProductCard(products) {
     `;
   } else {
     card.innerHTML = `
+      ${productImageMarkup(sortedProducts, groupName || primaryProduct.name)}
       <div class="option-card-heading">
         <div>
           <h3>${groupName || primaryProduct.name}</h3>

@@ -11,6 +11,7 @@ create table if not exists public.products (
   category text not null default 'Everyday',
   display_group text,
   option_label text,
+  image_url text,
   active boolean not null default true,
   sort_order integer not null default 0
 );
@@ -97,6 +98,9 @@ add column if not exists display_group text;
 
 alter table public.products
 add column if not exists option_label text;
+
+alter table public.products
+add column if not exists image_url text;
 
 alter table public.products
 drop constraint if exists products_capacity_units_check;
