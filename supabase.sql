@@ -158,11 +158,11 @@ begin
   from pickup_dates
   where id = p_pickup_date_id
     and is_open = true
-    and pickup_date >= current_date
+    and pickup_date > current_date + 2
   for update;
 
   if not found then
-    raise exception 'Pickup date is closed, past, or unavailable';
+    raise exception 'Pickup date is closed, past, or past the ordering cutoff';
   end if;
 
   select coalesce(sum(total_loaves), 0)::integer

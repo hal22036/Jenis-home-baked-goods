@@ -16,21 +16,31 @@ const STORE_SETTINGS = {
     "Small-batch bread baked to order. Choose a future pickup date, reserve your loaves, then pay with Venmo, Zelle, or PayPal.",
   pickupNote: "Pickup address and timing details will be confirmed after your order is received.",
   maxLoavesPerDate: 14,
+  orderCutoffDaysBeforePickup: 2,
   paymentOptions: {
     Venmo: {
+      label: "Cash",
+      link: "Pay Cash in Person",
+      instructions: "Please provide exact cash, as change is not available."
+    },Venmo: {
       label: "Venmo",
-      link: "YOUR_VENMO_LINK",
+      link: "https://venmo.com/u/Jeni-Hales",
       instructions: "Send payment by Venmo and include your order number in the note."
     },
     Zelle: {
       label: "Zelle",
-      link: "",
+      link: "801-602-8443",
       instructions: "Send payment by Zelle to your bakery email or phone. Add your order number in the memo."
     },
     PayPal: {
       label: "PayPal",
-      link: "YOUR_PAYPAL_LINK",
+      link: "paypal.me/JeniHales",
       instructions: "Send payment by PayPal and include your order number in the note."
+    },
+    CashApp: {
+      label: "CashApp",
+      link: "https://cash.app/$JeniHales10",
+      instructions: "Send payment by CashApp and include your order number in the note."
     }
   }
 };
@@ -80,6 +90,19 @@ function prettyDate(dateString) {
     month: "short",
     day: "numeric"
   });
+}
+
+function localDateString(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function earliestOrderablePickupDate() {
+  const date = new Date();
+  date.setDate(date.getDate() + STORE_SETTINGS.orderCutoffDaysBeforePickup);
+  return localDateString(date);
 }
 
 function isPlaceholder(value) {
@@ -142,7 +165,7 @@ async function loadStore() {
       supabaseClient
         .from("pickup_date_status")
         .select("*")
-        .gte("pickup_date", new Date().toISOString().slice(0, 10))
+        .gt("pickup_date", earliestOrderablePickupDate())
         .eq("is_open", true)
         .order("pickup_date", { ascending: true }),
       supabaseClient
