@@ -11,7 +11,7 @@ const SUPABASE_URL = "https://qvxrbipxxlygmmecgjxf.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_-w4Ef_bqgM_l9bY00thSpg_xohk7e9M";
 
 const STORE_SETTINGS = {
-  bakeryName: "Jeni's Home Baked Goods",
+  bakeryName: "Jeni's Home Made Goods",
   intro:
     "Small-batch bread baked to order. Choose a future pickup date, reserve your loaves, then choose your payment option.",
   pickupWindow: "4-7 pm",
