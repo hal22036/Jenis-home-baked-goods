@@ -74,6 +74,7 @@ const el = {
   intro: document.querySelector("[data-store-intro]"),
   pickupNote: document.querySelector("[data-pickup-note]"),
   dateList: document.querySelector("#date-list"),
+  dateSection: document.querySelector("#date-section"),
   dateStatus: document.querySelector("#date-status"),
   menuSection: document.querySelector("#menu-section"),
   customerSection: document.querySelector("#customer-section"),
@@ -289,6 +290,7 @@ function selectDate(dateId) {
   state.selectedDate = state.dates.find(d => d.id === dateId);
   state.quantities = {};
 
+  el.dateSection.hidden = false;
   el.menuSection.hidden = false;
   el.customerSection.hidden = false;
   el.successSection.hidden = true;
@@ -506,6 +508,7 @@ async function refreshSelectedDate() {
 }
 
 function showSuccess(result, paymentMethod) {
+  el.dateSection.hidden = true;
   el.menuSection.hidden = true;
   el.customerSection.hidden = true;
   el.successSection.hidden = false;
