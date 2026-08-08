@@ -85,6 +85,12 @@ const el = {
   form: document.querySelector("#order-form"),
   formMessage: document.querySelector("#form-message"),
   submit: document.querySelector("#submit-order"),
+  reviewSection: document.querySelector("#review-section"),
+  reviewContent: document.querySelector("#review-content"),
+  invoiceRequested: document.querySelector("#invoice-requested"),
+  editOrder: document.querySelector("#edit-order"),
+  confirmOrder: document.querySelector("#confirm-order"),
+  reviewMessage: document.querySelector("#review-message"),
   successSection: document.querySelector("#success-section"),
   successContent: document.querySelector("#success-content"),
   copyMessage: document.querySelector("#copy-message"),
@@ -204,6 +210,11 @@ function setMessage(message = "", type = "") {
   el.formMessage.className = type ? `message ${type}` : "message";
 }
 
+function setReviewMessage(message = "", type = "") {
+  el.reviewMessage.textContent = message;
+  el.reviewMessage.className = type ? `message ${type}` : "message";
+}
+
 function applyStoreSettings() {
   document.title = `${STORE_SETTINGS.bakeryName} | Bread Orders`;
   el.intro.textContent = STORE_SETTINGS.intro;
@@ -268,7 +279,7 @@ function renderDates() {
     return;
   }
 
-  el.dateStatus.textContent = `Each pickup date has its own ${STORE_SETTINGS.maxLoavesPerDate}-loaf capacity.`;
+  el.dateStatus.textContent = "";
 
   state.dates.forEach(date => {
     const remaining = remainingFor(date);
@@ -291,8 +302,10 @@ function selectDate(dateId) {
   state.quantities = {};
 
   el.dateSection.hidden = false;
+  el.intro.hidden = false;
   el.menuSection.hidden = false;
   el.customerSection.hidden = false;
+  el.reviewSection.hidden = true;
   el.successSection.hidden = true;
 
   renderDates();
@@ -347,9 +360,6 @@ function renderProducts() {
       <div>
         <h3>${product.name}</h3>
         <p>${product.description || ""}</p>
-        <span class="product-meta">
-          ${capacityUnitsFor(product) > 0 ? "Counts toward loaf capacity" : "Does not count toward loaf capacity"}
-        </span>
       </div>
       <div class="product-bottom">
         <strong>${money(product.price_cents)}</strong>
@@ -423,7 +433,7 @@ function updateSummary() {
   el.orderTotal.textContent = money(selectedTotalCents());
 }
 
-el.form.addEventListener("submit", async event => {
+el.form.addEventListener("submit", event => {
   event.preventDefault();
 
   if (state.isSubmitting) return;
@@ -447,6 +457,87 @@ el.form.addEventListener("submit", async event => {
     return;
   }
 
+  showReview();
+});
+
+function selectedItemsWithDetails() {
+  return state.products
+    .filter(product => (state.quantities[product.id] || 0) > 0)
+    .map(product => ({
+      product_id: product.id,
+      name: product.name,
+      quantity: state.quantities[product.id],
+      price_cents: product.price_cents,
+      capacity_units: capacityUnitsFor(product)
+    }));
+}
+
+function customerDetails() {
+  return {
+    name: document.querySelector("#customer-name").value.trim(),
+    email: document.querySelector("#customer-email").value.trim(),
+    phone: document.querySelector("#customer-phone").value.trim(),
+    notes: document.querySelector("#customer-notes").value.trim(),
+    paymentMethod: document.querySelector('input[name="payment"]:checked')?.value
+  };
+}
+
+function showReview() {
+  const details = customerDetails();
+  const payment = STORE_SETTINGS.paymentOptions[details.paymentMethod];
+  const items = selectedItemsWithDetails();
+
+  el.intro.hidden = true;
+  el.dateSection.hidden = true;
+  el.menuSection.hidden = true;
+  el.customerSection.hidden = true;
+  el.reviewSection.hidden = false;
+  el.successSection.hidden = true;
+  setReviewMessage();
+
+  el.reviewContent.innerHTML = `
+    <dl class="receipt invoice-receipt">
+      <div><dt>Pickup</dt><dd>${prettyDate(state.selectedDate.pickup_date)}</dd></div>
+      <div><dt>Name</dt><dd>${details.name}</dd></div>
+      <div><dt>Email</dt><dd>${details.email}</dd></div>
+      <div><dt>Phone</dt><dd>${details.phone}</dd></div>
+      <div><dt>Payment</dt><dd>${payment.label}</dd></div>
+      <div><dt>Loaf spots</dt><dd>${selectedCapacityUnits()}</dd></div>
+    </dl>
+    <div class="invoice-items">
+      ${items.map(item => `
+        <div>
+          <span>${item.quantity}x ${item.name}</span>
+          <span>${money(item.quantity * item.price_cents)}</span>
+        </div>
+      `).join("")}
+    </div>
+    ${details.notes ? `<p class="admin-notes"><strong>Questions/comments:</strong> ${details.notes}</p>` : ""}
+    <div class="summary">
+      <strong>Total</strong>
+      <strong>${money(selectedTotalCents())}</strong>
+    </div>
+  `;
+
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+el.editOrder.addEventListener("click", () => {
+  el.intro.hidden = false;
+  el.dateSection.hidden = false;
+  el.menuSection.hidden = false;
+  el.customerSection.hidden = false;
+  el.reviewSection.hidden = true;
+  el.successSection.hidden = true;
+  window.scrollTo({ top: el.menuSection.offsetTop - 16, behavior: "smooth" });
+});
+
+el.confirmOrder.addEventListener("click", submitReviewedOrder);
+
+async function submitReviewedOrder() {
+  if (state.isSubmitting) return;
+
+  const details = customerDetails();
   const items = state.products
     .filter(product => (state.quantities[product.id] || 0) > 0)
     .map(product => ({
@@ -455,21 +546,22 @@ el.form.addEventListener("submit", async event => {
     }));
 
   state.isSubmitting = true;
-  el.submit.disabled = true;
-  setMessage("Submitting your order...", "");
+  el.confirmOrder.disabled = true;
+  setReviewMessage("Submitting your order...", "");
 
   const { data, error } = await supabaseClient.rpc("place_order", {
     p_pickup_date_id: state.selectedDate.id,
-    p_customer_name: document.querySelector("#customer-name").value.trim(),
-    p_customer_email: document.querySelector("#customer-email").value.trim(),
-    p_customer_phone: document.querySelector("#customer-phone").value.trim(),
-    p_notes: document.querySelector("#customer-notes").value.trim(),
-    p_payment_method: paymentMethod,
+    p_customer_name: details.name,
+    p_customer_email: details.email,
+    p_customer_phone: details.phone,
+    p_notes: details.notes,
+    p_payment_method: details.paymentMethod,
+    p_invoice_requested: el.invoiceRequested.checked,
     p_items: items
   });
 
   state.isSubmitting = false;
-  el.submit.disabled = false;
+  el.confirmOrder.disabled = false;
 
   if (error) {
     console.error(error);
@@ -478,15 +570,15 @@ el.form.addEventListener("submit", async event => {
       ? "That pickup date filled up while you were ordering. Please choose another date or reduce your quantity."
       : "Your order could not be submitted. Please check your details and try again.";
 
-    setMessage(message, "error");
+    setReviewMessage(message, "error");
     await refreshSelectedDate();
     return;
   }
 
   const result = Array.isArray(data) ? data[0] : data;
-  showSuccess(result, paymentMethod);
+  showSuccess(result, details.paymentMethod, el.invoiceRequested.checked, selectedItemsWithDetails(), details);
   await refreshSelectedDate();
-});
+}
 
 async function refreshSelectedDate() {
   if (!state.selectedDate) return;
@@ -507,10 +599,12 @@ async function refreshSelectedDate() {
   }
 }
 
-function showSuccess(result, paymentMethod) {
+function showSuccess(result, paymentMethod, invoiceRequested, items, details) {
+  el.intro.hidden = true;
   el.dateSection.hidden = true;
   el.menuSection.hidden = true;
   el.customerSection.hidden = true;
+  el.reviewSection.hidden = true;
   el.successSection.hidden = false;
 
   state.lastOrder = {
@@ -524,7 +618,17 @@ function showSuccess(result, paymentMethod) {
       <div><dt>Order code</dt><dd>${result.order_code}</dd></div>
       <div><dt>Total</dt><dd>${money(result.total_cents)}</dd></div>
       <div><dt>Payment</dt><dd data-payment-label></dd></div>
+      <div><dt>Invoice email</dt><dd>${invoiceRequested ? "Requested" : "Not requested"}</dd></div>
     </dl>
+    <div class="invoice-items">
+      ${items.map(item => `
+        <div>
+          <span>${item.quantity}x ${item.name}</span>
+          <span>${money(item.quantity * item.price_cents)}</span>
+        </div>
+      `).join("")}
+    </div>
+    ${details.notes ? `<p class="admin-notes"><strong>Questions/comments:</strong> ${details.notes}</p>` : ""}
     <button class="copy-button" type="button" data-copy-order-code="${result.order_code}">
       Copy order code
     </button>
@@ -576,6 +680,7 @@ function showSuccess(result, paymentMethod) {
 
   renderSuccessPaymentDetails(paymentMethod);
   el.form.reset();
+  el.invoiceRequested.checked = false;
   state.quantities = {};
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -587,8 +692,10 @@ async function startAnotherOrder() {
 
   el.successSection.hidden = true;
   el.dateSection.hidden = false;
+  el.intro.hidden = false;
   el.menuSection.hidden = true;
   el.customerSection.hidden = true;
+  el.reviewSection.hidden = true;
   el.successContent.innerHTML = "";
   el.copyMessage.textContent = "";
 

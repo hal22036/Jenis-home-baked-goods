@@ -31,6 +31,7 @@ create table if not exists public.orders (
   payment_method text not null check (payment_method in ('Venmo','Zelle','PayPal','CashApp','CashAtPickup')),
   total_cents integer not null default 0,
   total_loaves integer not null check (total_loaves >= 0),
+  invoice_requested boolean not null default false,
   created_at timestamptz not null default now()
 );
 
@@ -65,6 +66,9 @@ add column if not exists fulfillment_status text not null default 'new';
 
 alter table public.orders
 add column if not exists archived boolean not null default false;
+
+alter table public.orders
+add column if not exists invoice_requested boolean not null default false;
 
 alter table public.orders
 drop constraint if exists orders_payment_status_check;
@@ -205,6 +209,7 @@ using (public.is_admin());
 -- Orders are created only through the function below.
 
 drop function if exists public.place_order(uuid,text,text,text,text,text,jsonb);
+drop function if exists public.place_order(uuid,text,text,text,text,text,boolean,jsonb);
 drop function if exists public.update_order_payment_method(uuid,text,text);
 drop function if exists public.update_order_payment_method(text,text);
 drop function if exists public.admin_list_orders(boolean);
@@ -219,6 +224,7 @@ create or replace function public.place_order(
   p_customer_phone text,
   p_notes text,
   p_payment_method text,
+  p_invoice_requested boolean,
   p_items jsonb
 )
 returns table(order_id uuid, order_code text, total_cents integer)
@@ -325,6 +331,7 @@ begin
     customer_phone,
     notes,
     payment_method,
+    invoice_requested,
     total_cents,
     total_loaves
   )
@@ -335,6 +342,7 @@ begin
     trim(p_customer_phone),
     nullif(p_notes, ''),
     p_payment_method,
+    p_invoice_requested,
     v_total,
     v_requested
   )
@@ -415,6 +423,7 @@ returns table(
   payment_status text,
   fulfillment_status text,
   archived boolean,
+  invoice_requested boolean,
   total_cents integer,
   total_loaves integer,
   created_at timestamptz,
@@ -442,6 +451,7 @@ begin
     o.payment_status,
     o.fulfillment_status,
     o.archived,
+    o.invoice_requested,
     o.total_cents,
     o.total_loaves,
     o.created_at,
@@ -594,8 +604,8 @@ begin
 end;
 $$;
 
-revoke all on function public.place_order(uuid,text,text,text,text,text,jsonb) from public;
-grant execute on function public.place_order(uuid,text,text,text,text,text,jsonb) to anon, authenticated;
+revoke all on function public.place_order(uuid,text,text,text,text,text,boolean,jsonb) from public;
+grant execute on function public.place_order(uuid,text,text,text,text,text,boolean,jsonb) to anon, authenticated;
 
 revoke all on function public.update_order_payment_method(text,text) from public;
 grant execute on function public.update_order_payment_method(text,text) to anon, authenticated;

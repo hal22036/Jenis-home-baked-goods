@@ -100,6 +100,21 @@
       </form>
     </section>
 
+    <section class="panel" id="review-section" aria-labelledby="review-heading" hidden>
+      <p class="step">Review order</p>
+      <h2 id="review-heading">Invoice summary</h2>
+      <div id="review-content"></div>
+      <label class="inline-check invoice-request">
+        <input id="invoice-requested" type="checkbox" />
+        Please email me an invoice.
+      </label>
+      <div class="review-actions">
+        <button class="secondary-button" type="button" id="edit-order">Edit order</button>
+        <button id="confirm-order" type="button">Place order</button>
+      </div>
+      <p id="review-message" class="message" role="status"></p>
+    </section>
+
     <section class="panel success-panel" id="success-section" aria-labelledby="success-heading" hidden>
       <p class="step">Order received</p>
       <h2 id="success-heading">Your loaves are reserved</h2>
