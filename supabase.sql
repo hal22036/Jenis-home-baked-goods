@@ -15,7 +15,7 @@ create table if not exists public.products (
 
 create table if not exists public.pickup_dates (
   id uuid primary key default gen_random_uuid(),
-  pickup_date date not null unique,
+  pickup_date date not null constraint pickup_dates_pickup_date_key unique,
   capacity integer not null default 14 check (capacity > 0),
   is_open boolean not null default true
 );
@@ -567,7 +567,7 @@ begin
   if p_id is null then
     insert into pickup_dates (pickup_date, capacity, is_open)
     values (p_pickup_date, p_capacity, p_is_open)
-    on conflict (pickup_date)
+    on conflict on constraint pickup_dates_pickup_date_key
     do update set
       capacity = excluded.capacity,
       is_open = excluded.is_open
