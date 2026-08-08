@@ -336,7 +336,8 @@ legend {
 
 button[type="submit"],
 .payment-link,
-.copy-button {
+.copy-button,
+.secondary-button {
   width: 100%;
   display: inline-flex;
   min-height: 50px;
@@ -355,19 +356,47 @@ button[type="submit"],
 
 button[type="submit"]:hover,
 .payment-link:hover,
-.copy-button:hover {
+.copy-button:hover,
+.secondary-button:hover {
   background: var(--accent-dark);
 }
 
-.copy-button {
+.copy-button,
+.secondary-button {
   margin-bottom: 12px;
   border: 1px solid var(--accent);
   background: #fff;
   color: var(--accent);
 }
 
-.copy-button:hover {
+.copy-button:hover,
+.secondary-button:hover {
   color: #fff;
+}
+
+.edit-payment {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.edit-payment summary {
+  color: var(--accent);
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.edit-payment label {
+  margin-top: 14px;
+}
+
+select {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
 }
 
 button[type="submit"]:disabled {

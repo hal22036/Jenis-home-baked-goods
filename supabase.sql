@@ -151,6 +151,7 @@ using (true);
 -- Orders are created only through the function below.
 
 drop function if exists public.place_order(uuid,text,text,text,text,text,jsonb);
+drop function if exists public.update_order_payment_method(uuid,text,text);
 
 create or replace function public.place_order(
   p_pickup_date_id uuid,
@@ -311,8 +312,42 @@ begin
 end;
 $$;
 
+create or replace function public.update_order_payment_method(
+  p_order_id uuid,
+  p_order_code text,
+  p_payment_method text
+)
+returns table(order_id uuid, order_code text, payment_method text)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if p_payment_method not in ('Venmo', 'Zelle', 'PayPal', 'CashApp', 'CashAtPickup') then
+    raise exception 'Invalid payment method';
+  end if;
+
+  update orders
+  set payment_method = p_payment_method
+  where id = p_order_id
+    and orders.order_code = p_order_code;
+
+  if not found then
+    raise exception 'Order not found';
+  end if;
+
+  return query
+  select orders.id, orders.order_code, orders.payment_method
+  from orders
+  where id = p_order_id;
+end;
+$$;
+
 revoke all on function public.place_order(uuid,text,text,text,text,text,jsonb) from public;
 grant execute on function public.place_order(uuid,text,text,text,text,text,jsonb) to anon, authenticated;
+
+revoke all on function public.update_order_payment_method(uuid,text,text) from public;
+grant execute on function public.update_order_payment_method(uuid,text,text) to anon, authenticated;
 
 grant select on public.products to anon, authenticated;
 grant select on public.pickup_dates to anon, authenticated;

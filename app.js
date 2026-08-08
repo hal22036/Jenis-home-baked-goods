@@ -62,6 +62,7 @@ const state = {
   products: [],
   selectedDate: null,
   quantities: {},
+  lastOrder: null,
   isSubmitting: false
 };
 
@@ -505,33 +506,103 @@ function showSuccess(result, paymentMethod) {
   el.customerSection.hidden = true;
   el.successSection.hidden = false;
 
-  const payment = STORE_SETTINGS.paymentOptions[paymentMethod];
-  const linkIsUsable = /^https?:\/\//.test(payment?.link || "");
-  const paymentAction = linkIsUsable
-    ? `<a class="payment-link" href="${payment.link}" target="_blank" rel="noopener">Open ${payment.label}</a>`
-    : "";
+  state.lastOrder = {
+    ...result,
+    paymentMethod
+  };
 
   el.successContent.innerHTML = `
     <dl class="receipt">
       <div><dt>Pickup</dt><dd>${prettyDate(state.selectedDate.pickup_date)}</dd></div>
       <div><dt>Order code</dt><dd>${result.order_code}</dd></div>
       <div><dt>Total</dt><dd>${money(result.total_cents)}</dd></div>
-      <div><dt>Payment</dt><dd>${payment.label}</dd></div>
+      <div><dt>Payment</dt><dd data-payment-label></dd></div>
     </dl>
     <button class="copy-button" type="button" data-copy-order-code="${result.order_code}">
       Copy order code
     </button>
-    <p>${payment.instructions}</p>
-    ${paymentAction}
+    <div id="success-payment-details"></div>
+    <details class="edit-payment">
+      <summary>Edit payment option</summary>
+      <label>
+        Payment option
+        <select id="success-payment-select">
+          ${Object.entries(STORE_SETTINGS.paymentOptions)
+            .map(([value, option]) => `
+              <option value="${value}" ${value === paymentMethod ? "selected" : ""}>
+                ${option.label}
+              </option>
+            `)
+            .join("")}
+        </select>
+      </label>
+      <button class="secondary-button" type="button" id="save-payment-method">
+        Save payment option
+      </button>
+      <p id="payment-edit-message" class="message" role="status"></p>
+    </details>
   `;
 
   el.successContent
     .querySelector("[data-copy-order-code]")
     .addEventListener("click", copyOrderCode);
+  el.successContent
+    .querySelector("#save-payment-method")
+    .addEventListener("click", saveSuccessPaymentMethod);
 
+  renderSuccessPaymentDetails(paymentMethod);
   el.form.reset();
   state.quantities = {};
   window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function renderSuccessPaymentDetails(paymentMethod) {
+  const payment = STORE_SETTINGS.paymentOptions[paymentMethod];
+  const paymentLabel = el.successContent.querySelector("[data-payment-label]");
+  const paymentDetails = el.successContent.querySelector("#success-payment-details");
+  const linkIsUsable = /^https?:\/\//.test(payment?.link || "");
+  const paymentAction = linkIsUsable
+    ? `<a class="payment-link" href="${payment.link}" target="_blank" rel="noopener">Open ${payment.label}</a>`
+    : "";
+
+  paymentLabel.textContent = payment.label;
+  paymentDetails.innerHTML = `
+    <p>${payment.instructions}</p>
+    ${paymentAction}
+  `;
+}
+
+async function saveSuccessPaymentMethod() {
+  if (!state.lastOrder) return;
+
+  const select = el.successContent.querySelector("#success-payment-select");
+  const message = el.successContent.querySelector("#payment-edit-message");
+  const button = el.successContent.querySelector("#save-payment-method");
+  const paymentMethod = select.value;
+
+  button.disabled = true;
+  message.textContent = "Saving payment option...";
+  message.className = "message";
+
+  const { error } = await supabaseClient.rpc("update_order_payment_method", {
+    p_order_id: state.lastOrder.order_id,
+    p_order_code: state.lastOrder.order_code,
+    p_payment_method: paymentMethod
+  });
+
+  button.disabled = false;
+
+  if (error) {
+    console.error(error);
+    message.textContent = "Could not update payment option. Please try again.";
+    message.className = "message error";
+    return;
+  }
+
+  state.lastOrder.paymentMethod = paymentMethod;
+  renderSuccessPaymentDetails(paymentMethod);
+  message.textContent = "Payment option updated.";
+  message.className = "message success";
 }
 
 async function copyOrderCode(event) {
