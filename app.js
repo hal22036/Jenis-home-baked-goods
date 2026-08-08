@@ -207,6 +207,13 @@ function compareSortOrder(a, b) {
   return aSort - bSort;
 }
 
+function compareCardOrder(a, b) {
+  const aPrice = Math.min(...a.map(product => product.price_cents));
+  const bPrice = Math.min(...b.map(product => product.price_cents));
+
+  return aPrice - bPrice || compareText(cardTitleFor(a[0]), cardTitleFor(b[0]));
+}
+
 function cleanText(value) {
   return String(value || "").trim();
 }
@@ -454,11 +461,7 @@ function renderProducts() {
 
       if (categoryDifference !== 0) return categoryDifference;
 
-      return (
-        compareText(categoryFor(a), categoryFor(b)) ||
-        compareText(cardTitleFor(a), cardTitleFor(b)) ||
-        compareText(optionLabelFor(a), optionLabelFor(b))
-      );
+      return compareText(categoryFor(a), categoryFor(b));
     })
     .reduce((groups, product) => {
       const category = categoryFor(product);
@@ -487,7 +490,7 @@ function renderProducts() {
     }, new Map());
 
     [...productCards.values()]
-      .sort((a, b) => compareText(cardTitleFor(a[0]), cardTitleFor(b[0])))
+      .sort(compareCardOrder)
       .forEach(cardProducts => {
         cardProducts.forEach(product => {
           state.quantities[product.id] = state.quantities[product.id] || 0;
