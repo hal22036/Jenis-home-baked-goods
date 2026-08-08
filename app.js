@@ -14,7 +14,11 @@ const STORE_SETTINGS = {
   bakeryName: "Jeni's Home Baked Goods",
   intro:
     "Small-batch bread baked to order. Choose a future pickup date, reserve your loaves, then choose your payment option.",
-  pickupNote: "Pickup address and timing details will be confirmed after your order is received.",
+  pickupWindow: "4-7 pm",
+  pickupAddress: "7140 Anchor Terrace St.",
+  gateCode: "#7716",
+  contactPhone: "801-602-8443",
+  pickupNote: "Pickup details are shown after your order is submitted.",
   maxLoavesPerDate: 14,
   orderCutoffWeekday: 3, // 0 = Sunday, 3 = Wednesday.
   orderCutoffHour: 17,
@@ -521,6 +525,17 @@ function showSuccess(result, paymentMethod) {
     <button class="copy-button" type="button" data-copy-order-code="${result.order_code}">
       Copy order code
     </button>
+    <div class="pickup-details">
+      <h3>Pickup details</h3>
+      <p>
+        Pickup is on ${prettyDate(state.selectedDate.pickup_date)} between ${STORE_SETTINGS.pickupWindow}.
+      </p>
+      <p>
+        Address: ${STORE_SETTINGS.pickupAddress}<br>
+        Gate Code: ${STORE_SETTINGS.gateCode}<br>
+        Please call/text with any questions: ${STORE_SETTINGS.contactPhone}.
+      </p>
+    </div>
     <div id="success-payment-details"></div>
     <details class="edit-payment">
       <summary>Edit payment option</summary>

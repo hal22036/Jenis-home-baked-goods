@@ -53,7 +53,11 @@ In `app.js`, edit `STORE_SETTINGS`:
 const STORE_SETTINGS = {
   bakeryName: "Jen's Home Baked Goods",
   intro: "Small-batch bread baked to order...",
-  pickupNote: "Pickup address and timing details...",
+  pickupWindow: "4-7 pm",
+  pickupAddress: "7140 Anchor Terrace St.",
+  gateCode: "#7716",
+  contactPhone: "801-602-8443",
+  pickupNote: "Pickup details are shown after your order is submitted.",
   maxLoavesPerDate: 14,
   orderCutoffWeekday: 3,
   orderCutoffHour: 17,

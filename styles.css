@@ -430,6 +430,24 @@ button[type="submit"]:disabled {
   word-break: break-word;
 }
 
+.pickup-details {
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  text-align: left;
+}
+
+.pickup-details h3 {
+  margin-bottom: 8px;
+  font-size: 1rem;
+}
+
+.pickup-details p {
+  margin: 8px 0 0;
+}
+
 .muted {
   color: var(--muted);
 }
