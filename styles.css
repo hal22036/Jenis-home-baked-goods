@@ -460,6 +460,12 @@ button[type="submit"]:hover,
   border-top: 1px solid var(--border);
 }
 
+.checkout-note {
+  margin: -6px 0 18px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
 .edit-payment summary {
   color: var(--accent);
   cursor: pointer;
@@ -517,6 +523,41 @@ button[type="submit"]:disabled {
 
 .review-actions {
   align-items: stretch;
+}
+
+.review-actions > button {
+  flex: 1 1 0;
+  margin-bottom: 0;
+}
+
+.review-edit-button {
+  border-color: var(--accent-dark);
+  background: #fff;
+  color: var(--accent-dark);
+}
+
+.review-edit-button:hover {
+  background: var(--accent-dark);
+  color: #fff;
+}
+
+.review-place-button {
+  width: 100%;
+  display: inline-flex;
+  min-height: 50px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--success);
+  border-radius: 8px;
+  background: var(--success);
+  color: #fff;
+  padding: 13px 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.review-place-button:hover {
+  background: #245238;
 }
 
 .receipt div {

@@ -9,7 +9,7 @@
   />
   <title>Bakery Bread Orders</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
-  <link rel="stylesheet" href="styles.css?v=20260808-price-sort" />
+  <link rel="stylesheet" href="styles.css?v=20260808-review-actions" />
 </head>
 <body>
   <header class="site-header">
@@ -103,14 +103,15 @@
     <section class="panel" id="review-section" aria-labelledby="review-heading" hidden>
       <p class="step">Review order</p>
       <h2 id="review-heading">Invoice summary</h2>
+      <p class="checkout-note">Review your invoice, then place your order below to check out.</p>
       <div id="review-content"></div>
       <label class="inline-check invoice-request">
         <input id="invoice-requested" type="checkbox" />
         Please email me an invoice.
       </label>
       <div class="review-actions">
-        <button class="secondary-button" type="button" id="edit-order">Edit order</button>
-        <button id="confirm-order" type="button">Place order</button>
+        <button class="secondary-button review-edit-button" type="button" id="edit-order">Edit order</button>
+        <button class="review-place-button" id="confirm-order" type="button">Place order</button>
       </div>
       <p id="review-message" class="message" role="status"></p>
     </section>
@@ -127,6 +128,6 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20260808-price-sort"></script>
+  <script src="app.js?v=20260808-review-actions"></script>
 </body>
 </html>
