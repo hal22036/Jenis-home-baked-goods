@@ -552,6 +552,14 @@ button[type="submit"]:disabled {
   accent-color: var(--success);
 }
 
+.invoice-email-field {
+  margin: -4px 0 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fffdf9;
+}
+
 .review-actions {
   align-items: stretch;
 }

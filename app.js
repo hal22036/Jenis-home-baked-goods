@@ -88,6 +88,8 @@ const el = {
   reviewSection: document.querySelector("#review-section"),
   reviewContent: document.querySelector("#review-content"),
   invoiceRequested: document.querySelector("#invoice-requested"),
+  invoiceEmailField: document.querySelector("#invoice-email-field"),
+  invoiceEmail: document.querySelector("#invoice-email"),
   editOrder: document.querySelector("#edit-order"),
   confirmOrder: document.querySelector("#confirm-order"),
   reviewMessage: document.querySelector("#review-message"),
@@ -676,7 +678,7 @@ function selectedItemsWithDetails() {
 function customerDetails() {
   return {
     name: document.querySelector("#customer-name").value.trim(),
-    email: document.querySelector("#customer-email").value.trim(),
+    email: el.invoiceEmail.value.trim(),
     phone: document.querySelector("#customer-phone").value.trim(),
     notes: document.querySelector("#customer-notes").value.trim(),
     paymentMethod: document.querySelector('input[name="payment"]:checked')?.value
@@ -685,6 +687,16 @@ function customerDetails() {
 
 function hasValidPaymentMethod(paymentMethod) {
   return Boolean(paymentMethod && STORE_SETTINGS.paymentOptions[paymentMethod]);
+}
+
+function updateInvoiceEmailField() {
+  const invoiceRequested = el.invoiceRequested.checked;
+  el.invoiceEmailField.hidden = !invoiceRequested;
+  el.invoiceEmail.required = invoiceRequested;
+
+  if (!invoiceRequested) {
+    el.invoiceEmail.value = "";
+  }
 }
 
 function showReview() {
@@ -710,7 +722,6 @@ function showReview() {
     <dl class="receipt invoice-receipt">
       <div><dt>Pickup</dt><dd>${prettyDate(state.selectedDate.pickup_date)}</dd></div>
       <div><dt>Name</dt><dd>${details.name}</dd></div>
-      <div><dt>Email</dt><dd>${details.email}</dd></div>
       <div><dt>Phone</dt><dd>${details.phone}</dd></div>
       <div><dt>Payment</dt><dd>${payment.label}</dd></div>
       <div><dt>Loaf spots</dt><dd>${selectedCapacityUnits()}</dd></div>
@@ -745,16 +756,28 @@ el.editOrder.addEventListener("click", () => {
 
 el.confirmOrder.addEventListener("click", submitReviewedOrder);
 
+el.invoiceRequested.addEventListener("change", () => {
+  updateInvoiceEmailField();
+  setReviewMessage();
+});
+
 async function submitReviewedOrder() {
   if (state.isSubmitting) return;
 
   const details = customerDetails();
+  const invoiceRequested = el.invoiceRequested.checked;
 
   if (!hasValidPaymentMethod(details.paymentMethod)) {
     setMessage("Please choose a payment option before placing your order.", "error");
     el.reviewSection.hidden = true;
     el.customerSection.hidden = false;
     window.scrollTo({ top: el.customerSection.offsetTop - 16, behavior: "smooth" });
+    return;
+  }
+
+  if (invoiceRequested && (!details.email || !el.invoiceEmail.checkValidity())) {
+    setReviewMessage("Please enter a valid email address for the receipt.", "error");
+    el.invoiceEmail.focus();
     return;
   }
 
@@ -772,11 +795,11 @@ async function submitReviewedOrder() {
   const { data, error } = await supabaseClient.rpc("place_order", {
     p_pickup_date_id: state.selectedDate.id,
     p_customer_name: details.name,
-    p_customer_email: details.email,
+    p_customer_email: invoiceRequested ? details.email : null,
     p_customer_phone: details.phone,
     p_notes: details.notes,
     p_payment_method: details.paymentMethod,
-    p_invoice_requested: el.invoiceRequested.checked,
+    p_invoice_requested: invoiceRequested,
     p_items: items
   });
 
@@ -796,7 +819,7 @@ async function submitReviewedOrder() {
   }
 
   const result = Array.isArray(data) ? data[0] : data;
-  showSuccess(result, details.paymentMethod, el.invoiceRequested.checked, selectedItemsWithDetails(), details);
+  showSuccess(result, details.paymentMethod, invoiceRequested, selectedItemsWithDetails(), details);
   await refreshSelectedDate();
 }
 
@@ -838,7 +861,8 @@ function showSuccess(result, paymentMethod, invoiceRequested, items, details) {
       <div><dt>Order code</dt><dd>${result.order_code}</dd></div>
       <div><dt>Total</dt><dd>${money(result.total_cents)}</dd></div>
       <div><dt>Payment</dt><dd data-payment-label></dd></div>
-      <div><dt>Invoice email</dt><dd>${invoiceRequested ? "Requested" : "Not requested"}</dd></div>
+      <div><dt>Receipt email</dt><dd>${invoiceRequested ? "Requested" : "Not requested"}</dd></div>
+      ${invoiceRequested ? `<div><dt>Email</dt><dd>${details.email}</dd></div>` : ""}
     </dl>
     <div class="invoice-items">
       ${items.map(item => `
@@ -901,6 +925,7 @@ function showSuccess(result, paymentMethod, invoiceRequested, items, details) {
   renderSuccessPaymentDetails(paymentMethod);
   el.form.reset();
   el.invoiceRequested.checked = false;
+  updateInvoiceEmailField();
   state.quantities = {};
   window.scrollTo({ top: 0, behavior: "smooth" });
 }

@@ -28,7 +28,7 @@ create table if not exists public.orders (
   order_code text not null unique default upper(substr(encode(gen_random_bytes(6), 'hex'), 1, 8)),
   pickup_date_id uuid not null references public.pickup_dates(id),
   customer_name text not null,
-  customer_email text not null,
+  customer_email text,
   customer_phone text not null,
   notes text,
   payment_method text not null check (payment_method in ('Venmo','Zelle','PayPal','CashApp','CashAtPickup')),
@@ -72,6 +72,9 @@ add column if not exists archived boolean not null default false;
 
 alter table public.orders
 add column if not exists invoice_requested boolean not null default false;
+
+alter table public.orders
+alter column customer_email drop not null;
 
 alter table public.orders
 drop constraint if exists orders_payment_status_check;
@@ -268,9 +271,13 @@ begin
   end if;
 
   if nullif(trim(p_customer_name), '') is null
-    or nullif(trim(p_customer_email), '') is null
     or nullif(trim(p_customer_phone), '') is null then
-    raise exception 'Customer name, email, and phone are required';
+    raise exception 'Customer name and phone are required';
+  end if;
+
+  if coalesce(p_invoice_requested, false)
+    and nullif(trim(coalesce(p_customer_email, '')), '') is null then
+    raise exception 'Email is required when an invoice is requested';
   end if;
 
   if jsonb_typeof(p_items) is distinct from 'array' then
@@ -356,11 +363,11 @@ begin
   values (
     p_pickup_date_id,
     trim(p_customer_name),
-    trim(p_customer_email),
+    nullif(trim(coalesce(p_customer_email, '')), ''),
     trim(p_customer_phone),
     nullif(p_notes, ''),
     p_payment_method,
-    p_invoice_requested,
+    coalesce(p_invoice_requested, false),
     v_total,
     v_requested
   )

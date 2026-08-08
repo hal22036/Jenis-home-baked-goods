@@ -9,7 +9,7 @@
   />
   <title>Bakery Bread Orders</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
-  <link rel="stylesheet" href="styles.css?v=20260808-admin-products" />
+  <link rel="stylesheet" href="styles.css?v=20260808-receipt-email" />
 </head>
 <body>
   <header class="site-header">
@@ -69,11 +69,6 @@
           </label>
 
           <label>
-            Email
-            <input id="customer-email" type="email" autocomplete="email" required />
-          </label>
-
-          <label>
             Phone
             <input id="customer-phone" type="tel" autocomplete="tel" required />
           </label>
@@ -106,12 +101,16 @@
       <h2 id="review-heading">Invoice summary</h2>
       <div id="review-content"></div>
       <div class="invoice-request">
-        <span>Email me an invoice?</span>
+        <span>Email me a receipt?</span>
         <label class="invoice-yes">
           <span>Yes</span>
           <input id="invoice-requested" type="checkbox" />
         </label>
       </div>
+      <label class="invoice-email-field" id="invoice-email-field" hidden>
+        Email for receipt
+        <input id="invoice-email" type="email" autocomplete="email" />
+      </label>
       <div class="review-actions">
         <button class="secondary-button review-edit-button" type="button" id="edit-order">Edit order</button>
         <button class="review-place-button" id="confirm-order" type="button">Place order</button>
@@ -131,6 +130,6 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20260808-admin-products"></script>
+  <script src="app.js?v=20260808-receipt-email"></script>
 </body>
 </html>
