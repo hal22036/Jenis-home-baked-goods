@@ -339,6 +339,20 @@ function productImageMarkup(products, altText) {
   `;
 }
 
+function invoiceItemImageMarkup(item) {
+  if (!item.image_url) return "";
+
+  return `
+    <img
+      class="invoice-item-image"
+      src="${escapeAttribute(item.image_url)}"
+      alt="${escapeAttribute(item.name)}"
+      loading="lazy"
+      onerror="this.hidden=true"
+    />
+  `;
+}
+
 function itemSubtotalCents(product) {
   return (state.quantities[product.id] || 0) * product.price_cents;
 }
@@ -699,7 +713,8 @@ function selectedItemsWithDetails() {
       name: displayNameFor(product),
       quantity: state.quantities[product.id],
       price_cents: product.price_cents,
-      capacity_units: capacityUnitsFor(product)
+      capacity_units: capacityUnitsFor(product),
+      image_url: cleanText(product.image_url)
     }))
     .sort((a, b) => compareText(a.name, b.name));
 }
@@ -758,7 +773,10 @@ function showReview() {
     <div class="invoice-items">
       ${items.map(item => `
         <div>
-          <span>${item.quantity}x ${item.name}</span>
+          <span class="invoice-item-name">
+            ${invoiceItemImageMarkup(item)}
+            <span>${item.quantity}x ${item.name}</span>
+          </span>
           <span>${money(item.quantity * item.price_cents)}</span>
         </div>
       `).join("")}
@@ -872,6 +890,12 @@ async function refreshSelectedDate() {
 }
 
 function showSuccess(result, paymentMethod, invoiceRequested, items, details) {
+  const payment = STORE_SETTINGS.paymentOptions[paymentMethod];
+  const linkIsUsable = /^https?:\/\//.test(payment?.link || "");
+  const paymentAction = linkIsUsable
+    ? `<a class="payment-link success-pay-button" href="${payment.link}" target="_blank" rel="noopener">Pay with ${payment.label}</a>`
+    : "";
+
   el.intro.hidden = true;
   el.dateSection.hidden = true;
   el.menuSection.hidden = true;
@@ -893,21 +917,46 @@ function showSuccess(result, paymentMethod, invoiceRequested, items, details) {
       <div><dt>Receipt email</dt><dd>${invoiceRequested ? "Requested" : "Not requested"}</dd></div>
       ${invoiceRequested ? `<div><dt>Email</dt><dd>${details.email}</dd></div>` : ""}
     </dl>
+    <div class="success-actions">
+      <button class="copy-button" type="button" data-copy-order-code="${result.order_code}">
+        Copy order code
+      </button>
+      <div id="success-payment-details">
+        <p>${payment.instructions}</p>
+        ${paymentAction}
+      </div>
+      <details class="edit-payment">
+        <summary>Edit payment option</summary>
+        <label>
+          Payment option
+          <select id="success-payment-select">
+            ${Object.entries(STORE_SETTINGS.paymentOptions)
+              .map(([value, option]) => `
+                <option value="${value}" ${value === paymentMethod ? "selected" : ""}>
+                  ${option.label}
+                </option>
+              `)
+              .join("")}
+          </select>
+        </label>
+        <button class="secondary-button" type="button" id="save-payment-method">
+          Save payment option
+        </button>
+        <p id="payment-edit-message" class="message" role="status"></p>
+      </details>
+    </div>
     <div class="invoice-items">
       ${items.map(item => `
         <div>
-          <span>${item.quantity}x ${item.name}</span>
+          <span class="invoice-item-name">
+            ${invoiceItemImageMarkup(item)}
+            <span>${item.quantity}x ${item.name}</span>
+          </span>
           <span>${money(item.quantity * item.price_cents)}</span>
         </div>
       `).join("")}
     </div>
     ${details.notes ? `<p class="admin-notes"><strong>Questions/comments:</strong> ${details.notes}</p>` : ""}
-    <button class="copy-button" type="button" data-copy-order-code="${result.order_code}">
-      Copy order code
-    </button>
-    <button class="secondary-button" type="button" id="make-another-order">
-      Make another order
-    </button>
     <div class="pickup-details">
       <h3>Pickup details</h3>
       <p>
@@ -919,26 +968,9 @@ function showSuccess(result, paymentMethod, invoiceRequested, items, details) {
         Please call/text with any questions: ${STORE_SETTINGS.contactPhone}.
       </p>
     </div>
-    <div id="success-payment-details"></div>
-    <details class="edit-payment">
-      <summary>Edit payment option</summary>
-      <label>
-        Payment option
-        <select id="success-payment-select">
-          ${Object.entries(STORE_SETTINGS.paymentOptions)
-            .map(([value, option]) => `
-              <option value="${value}" ${value === paymentMethod ? "selected" : ""}>
-                ${option.label}
-              </option>
-            `)
-            .join("")}
-        </select>
-      </label>
-      <button class="secondary-button" type="button" id="save-payment-method">
-        Save payment option
-      </button>
-      <p id="payment-edit-message" class="message" role="status"></p>
-    </details>
+    <button class="secondary-button" type="button" id="make-another-order">
+      Make another order
+    </button>
   `;
 
   el.successContent
@@ -983,7 +1015,7 @@ function renderSuccessPaymentDetails(paymentMethod) {
   const paymentDetails = el.successContent.querySelector("#success-payment-details");
   const linkIsUsable = /^https?:\/\//.test(payment?.link || "");
   const paymentAction = linkIsUsable
-    ? `<a class="payment-link" href="${payment.link}" target="_blank" rel="noopener">Open ${payment.label}</a>`
+    ? `<a class="payment-link success-pay-button" href="${payment.link}" target="_blank" rel="noopener">Pay with ${payment.label}</a>`
     : "";
 
   paymentLabel.textContent = payment.label;

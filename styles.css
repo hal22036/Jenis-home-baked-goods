@@ -524,6 +524,22 @@ button[type="submit"]:disabled {
   gap: 16px;
 }
 
+.invoice-item-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.invoice-item-image {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  object-fit: cover;
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
 .invoice-request {
   display: flex;
   align-items: center;
@@ -597,6 +613,45 @@ button[type="submit"]:disabled {
 
 .review-place-button:hover {
   background: #245238;
+}
+
+.success-actions {
+  display: grid;
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.success-actions .copy-button {
+  margin-bottom: 0;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.success-actions .copy-button:hover {
+  background: var(--accent-dark);
+}
+
+.success-pay-button {
+  margin-bottom: 0;
+  border: 1px solid var(--success);
+  background: var(--success);
+  color: #fff;
+}
+
+.success-pay-button:hover {
+  background: #245238;
+}
+
+#success-payment-details {
+  display: grid;
+  gap: 10px;
+}
+
+#success-payment-details p {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 700;
 }
 
 .receipt div {
