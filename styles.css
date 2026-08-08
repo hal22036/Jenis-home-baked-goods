@@ -801,18 +801,32 @@ button[type="submit"]:disabled {
   }
 
   .option-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px;
+    align-items: start;
   }
 
   .option-controls {
-    grid-template-columns: auto auto auto;
-    justify-content: start;
+    grid-template-columns: auto auto;
+    justify-content: end;
+    justify-items: end;
   }
 
   .option-price,
   .option-subtotal {
-    text-align: left;
+    text-align: right;
+  }
+
+  .option-controls .quantity {
+    grid-column: 1 / -1;
+  }
+
+  .option-price {
+    grid-column: 1;
+  }
+
+  .option-subtotal {
+    grid-column: 2;
   }
 }
 
@@ -827,8 +841,9 @@ button[type="submit"]:disabled {
   }
 
   .option-controls {
-    grid-template-columns: 1fr;
-    justify-content: stretch;
+    grid-template-columns: auto auto;
+    justify-content: end;
+    justify-items: end;
   }
 
   .receipt dd {
