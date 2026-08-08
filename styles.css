@@ -111,7 +111,7 @@ h2 {
 }
 
 .category-grid {
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-auto-rows: 1fr;
   align-items: stretch;
 }
@@ -185,7 +185,6 @@ h2 {
 }
 
 .option-product {
-  grid-column: span 2;
   min-height: auto;
 }
 
@@ -612,14 +611,8 @@ button[type="submit"]:disabled {
     height: 80px;
   }
 
-  .option-product {
-    grid-column: span 1;
-  }
-}
-
 @media (max-width: 430px) {
-  .date-grid,
-  .category-grid {
+  .date-grid {
     grid-template-columns: 1fr;
   }
 
