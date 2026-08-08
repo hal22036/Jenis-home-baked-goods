@@ -118,7 +118,7 @@ Prices are stored in cents:
 
 Set `active` to `false` to hide a bread without deleting it.
 
-The storefront alphabetizes items inside each category by product name or `display_group`. Grouped choices are alphabetized by `option_label`, so `sort_order` can be left alone unless you want it for your own notes.
+The storefront alphabetizes product cards inside each category by product name or `display_group`. Grouped choices use `sort_order` first, then `option_label`, so you can place `Plain` before flavored granola or `2 oz` before larger sizes.
 
 Use `image_url` to show a product photo. Put the image file in the repository `assets` folder, commit it to GitHub, then enter a relative path like:
 

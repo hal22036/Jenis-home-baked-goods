@@ -200,6 +200,13 @@ function compareText(a = "", b = "") {
   return a.localeCompare(b, undefined, { sensitivity: "base" });
 }
 
+function compareSortOrder(a, b) {
+  const aSort = Number.isFinite(Number(a.sort_order)) ? Number(a.sort_order) : 0;
+  const bSort = Number.isFinite(Number(b.sort_order)) ? Number(b.sort_order) : 0;
+
+  return aSort - bSort;
+}
+
 function cleanText(value) {
   return String(value || "").trim();
 }
@@ -497,7 +504,7 @@ function renderProductCard(products) {
   const card = document.createElement("article");
   const sortedProducts = products
     .slice()
-    .sort((a, b) => compareText(optionLabelFor(a), optionLabelFor(b)));
+    .sort((a, b) => compareSortOrder(a, b) || compareText(optionLabelFor(a), optionLabelFor(b)));
   const primaryProduct = sortedProducts[0];
   const groupName = groupNameFor(primaryProduct);
   const isGrouped = products.length > 1 || Boolean(groupName);
