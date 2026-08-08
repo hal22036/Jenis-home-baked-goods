@@ -189,8 +189,8 @@ h2 {
 }
 
 .product-image {
-  width: 132px;
-  height: 88px;
+  width: min(100%, 220px);
+  height: 140px;
   display: block;
   justify-self: center;
   object-fit: cover;
@@ -607,9 +607,10 @@ button[type="submit"]:disabled {
   }
 
   .product-image {
-    width: 120px;
-    height: 80px;
+    width: min(100%, 180px);
+    height: 112px;
   }
+}
 
 @media (max-width: 430px) {
   .date-grid {
