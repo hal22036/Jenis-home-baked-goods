@@ -5,21 +5,26 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const state = {
   orders: [],
-  pickupDates: []
+  pickupDates: [],
+  products: []
 };
 
 const el = {
   loginPanel: document.querySelector("#login-panel"),
   adminPanel: document.querySelector("#admin-panel"),
   datesPanel: document.querySelector("#dates-panel"),
+  productsPanel: document.querySelector("#products-panel"),
   loginForm: document.querySelector("#admin-login-form"),
   loginMessage: document.querySelector("#login-message"),
   adminMessage: document.querySelector("#admin-message"),
   dateAdminMessage: document.querySelector("#date-admin-message"),
+  productAdminMessage: document.querySelector("#product-admin-message"),
   ordersList: document.querySelector("#orders-list"),
   pickupDatesList: document.querySelector("#pickup-dates-list"),
+  productsList: document.querySelector("#products-list"),
   includeArchived: document.querySelector("#include-archived"),
   refreshOrders: document.querySelector("#refresh-orders"),
+  refreshProducts: document.querySelector("#refresh-products"),
   signOut: document.querySelector("#admin-sign-out"),
   pickupDateForm: document.querySelector("#pickup-date-form"),
   pickupDateId: document.querySelector("#pickup-date-id"),
@@ -65,13 +70,15 @@ function showLogin() {
   el.loginPanel.hidden = false;
   el.adminPanel.hidden = true;
   el.datesPanel.hidden = true;
+  el.productsPanel.hidden = true;
 }
 
 async function showAdmin() {
   el.loginPanel.hidden = true;
   el.adminPanel.hidden = false;
   el.datesPanel.hidden = false;
-  await Promise.all([loadOrders(), loadPickupDates()]);
+  el.productsPanel.hidden = false;
+  await Promise.all([loadOrders(), loadPickupDates(), loadProducts()]);
 }
 
 el.loginForm.addEventListener("submit", async event => {
@@ -100,7 +107,10 @@ el.signOut.addEventListener("click", async () => {
 el.refreshOrders.addEventListener("click", () => {
   loadOrders();
   loadPickupDates();
+  loadProducts();
 });
+
+el.refreshProducts.addEventListener("click", loadProducts);
 
 el.includeArchived.addEventListener("change", loadOrders);
 
@@ -251,6 +261,85 @@ async function loadPickupDates() {
 
   state.pickupDates = data || [];
   renderPickupDates();
+}
+
+async function loadProducts() {
+  setMessage(el.productAdminMessage, "Loading products...");
+
+  const { data, error } = await supabaseClient.rpc("admin_list_products");
+
+  if (error) {
+    setMessage(el.productAdminMessage, error.message, "error");
+    return;
+  }
+
+  state.products = data || [];
+  renderProducts();
+  setMessage(el.productAdminMessage, `${state.products.length} product${state.products.length === 1 ? "" : "s"} shown.`, "success");
+}
+
+function renderProducts() {
+  if (!state.products.length) {
+    el.productsList.innerHTML = "<p class=\"muted\">No products to show.</p>";
+    return;
+  }
+
+  const groups = state.products.reduce((map, product) => {
+    const category = product.category || "Other";
+    if (!map.has(category)) map.set(category, []);
+    map.get(category).push(product);
+    return map;
+  }, new Map());
+
+  el.productsList.innerHTML = [...groups.entries()].map(([category, products]) => `
+    <section class="admin-product-category">
+      <h3>${category}</h3>
+      <div class="admin-products">
+        ${products.map(product => `
+          <article class="admin-product-row ${product.active ? "" : "is-inactive"}" data-product-id="${product.id}">
+            <div>
+              <strong>${product.display_group && product.option_label ? `${product.display_group} - ${product.option_label}` : product.name}</strong>
+              <p>${money(product.price_cents)} ${product.capacity_units > 0 ? "· counts toward loaf capacity" : "· add-on item"}</p>
+            </div>
+            <label class="inline-check product-active-check">
+              <span>Offer this week</span>
+              <input type="checkbox" data-product-active ${product.active ? "checked" : ""} />
+            </label>
+          </article>
+        `).join("")}
+      </div>
+    </section>
+  `).join("");
+
+  el.productsList.querySelectorAll("[data-product-active]").forEach(input => {
+    input.addEventListener("change", saveProductActive);
+  });
+}
+
+async function saveProductActive(event) {
+  const input = event.currentTarget;
+  const row = input.closest("[data-product-id]");
+  const previousValue = !input.checked;
+
+  input.disabled = true;
+  setMessage(el.productAdminMessage, "Saving product availability...");
+
+  const { error } = await supabaseClient.rpc("admin_update_product_active", {
+    p_product_id: row.dataset.productId,
+    p_active: input.checked
+  });
+
+  input.disabled = false;
+
+  if (error) {
+    input.checked = previousValue;
+    setMessage(el.productAdminMessage, error.message, "error");
+    return;
+  }
+
+  row.classList.toggle("is-inactive", !input.checked);
+  setMessage(el.productAdminMessage, "Product availability saved.", "success");
+  await loadProducts();
 }
 
 function renderPickupDates() {

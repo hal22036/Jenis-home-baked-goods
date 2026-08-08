@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bakery Admin | Jeni's Home Baked Goods</title>
-  <link rel="stylesheet" href="styles.css" />
-  <link rel="stylesheet" href="admin.css" />
+  <link rel="stylesheet" href="styles.css?v=20260808-admin-products" />
+  <link rel="stylesheet" href="admin.css?v=20260808-admin-products" />
 </head>
 <body>
   <header class="site-header admin-header">
@@ -52,6 +52,19 @@
       <div id="orders-list" class="orders-list"></div>
     </section>
 
+    <section class="panel" id="products-panel" hidden>
+      <div class="admin-toolbar">
+        <div>
+          <p class="step">Products</p>
+          <h2>Weekly menu availability</h2>
+        </div>
+        <button class="secondary-button compact-button" type="button" id="refresh-products">Refresh products</button>
+      </div>
+      <p class="muted">Turn items off when you are not offering them. Inactive items disappear from the public order page.</p>
+      <p id="product-admin-message" class="message" role="status"></p>
+      <div id="products-list" class="products-list"></div>
+    </section>
+
     <section class="panel" id="dates-panel" hidden>
       <div class="admin-toolbar">
         <div>
@@ -84,6 +97,6 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="admin.js"></script>
+  <script src="admin.js?v=20260808-admin-products"></script>
 </body>
 </html>

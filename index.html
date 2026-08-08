@@ -9,7 +9,7 @@
   />
   <title>Bakery Bread Orders</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
-  <link rel="stylesheet" href="styles.css?v=20260808-yellow-note" />
+  <link rel="stylesheet" href="styles.css?v=20260808-admin-products" />
 </head>
 <body>
   <header class="site-header">
@@ -105,10 +105,13 @@
       <p class="step">Review order</p>
       <h2 id="review-heading">Invoice summary</h2>
       <div id="review-content"></div>
-      <label class="inline-check invoice-request">
-        <input id="invoice-requested" type="checkbox" />
-        Please email me an invoice.
-      </label>
+      <div class="invoice-request">
+        <span>Email me an invoice?</span>
+        <label class="invoice-yes">
+          <span>Yes</span>
+          <input id="invoice-requested" type="checkbox" />
+        </label>
+      </div>
       <div class="review-actions">
         <button class="secondary-button review-edit-button" type="button" id="edit-order">Edit order</button>
         <button class="review-place-button" id="confirm-order" type="button">Place order</button>
@@ -128,6 +131,6 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20260808-yellow-note"></script>
+  <script src="app.js?v=20260808-admin-products"></script>
 </body>
 </html>

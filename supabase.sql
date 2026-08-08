@@ -232,6 +232,8 @@ drop function if exists public.admin_list_orders(boolean);
 drop function if exists public.admin_update_order_status(uuid,text,text,boolean);
 drop function if exists public.admin_list_pickup_dates();
 drop function if exists public.admin_save_pickup_date(uuid,date,integer,boolean);
+drop function if exists public.admin_list_products();
+drop function if exists public.admin_update_product_active(uuid,boolean);
 
 create or replace function public.place_order(
   p_pickup_date_id uuid,
@@ -622,6 +624,74 @@ begin
 end;
 $$;
 
+create or replace function public.admin_list_products()
+returns table(
+  id uuid,
+  name text,
+  description text,
+  price_cents integer,
+  capacity_units integer,
+  category text,
+  display_group text,
+  option_label text,
+  image_url text,
+  active boolean,
+  sort_order integer
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Admin access required';
+  end if;
+
+  return query
+  select
+    p.id,
+    p.name,
+    p.description,
+    p.price_cents,
+    p.capacity_units,
+    p.category,
+    p.display_group,
+    p.option_label,
+    p.image_url,
+    p.active,
+    p.sort_order
+  from public.products p
+  order by p.category asc, coalesce(p.display_group, p.name) asc, p.sort_order asc, coalesce(p.option_label, p.name) asc;
+end;
+$$;
+
+create or replace function public.admin_update_product_active(
+  p_product_id uuid,
+  p_active boolean
+)
+returns table(saved_id uuid, saved_active boolean)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Admin access required';
+  end if;
+
+  update public.products as p
+  set active = p_active
+  where p.id = p_product_id
+  returning p.id, p.active into saved_id, saved_active;
+
+  if saved_id is null then
+    raise exception 'Product not found';
+  end if;
+
+  return next;
+end;
+$$;
+
 revoke all on function public.place_order(uuid,text,text,text,text,text,boolean,jsonb) from public;
 grant execute on function public.place_order(uuid,text,text,text,text,text,boolean,jsonb) to anon, authenticated;
 
@@ -642,6 +712,12 @@ grant execute on function public.admin_list_pickup_dates() to authenticated;
 
 revoke all on function public.admin_save_pickup_date(uuid,date,integer,boolean) from public;
 grant execute on function public.admin_save_pickup_date(uuid,date,integer,boolean) to authenticated;
+
+revoke all on function public.admin_list_products() from public;
+grant execute on function public.admin_list_products() to authenticated;
+
+revoke all on function public.admin_update_product_active(uuid,boolean) from public;
+grant execute on function public.admin_update_product_active(uuid,boolean) to authenticated;
 
 grant select on public.products to anon, authenticated;
 grant select on public.pickup_dates to anon, authenticated;

@@ -43,25 +43,40 @@
 }
 
 .orders-list,
-.pickup-dates-list {
+.pickup-dates-list,
+.products-list,
+.admin-products {
   display: grid;
   gap: 14px;
 }
 
 .admin-order,
-.pickup-date-row {
+.pickup-date-row,
+.admin-product-row {
   padding: 16px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: #fffdf9;
 }
 
-.admin-order.is-archived {
+.admin-order.is-archived,
+.admin-product-row.is-inactive {
   opacity: 0.72;
+}
+
+.admin-product-category {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-product-category h3 {
+  margin: 0;
+  color: var(--accent-dark);
 }
 
 .order-heading,
 .pickup-date-row,
+.admin-product-row,
 .admin-items div {
   display: flex;
   align-items: flex-start;
@@ -74,7 +89,8 @@
 }
 
 .order-heading p,
-.pickup-date-row p {
+.pickup-date-row p,
+.admin-product-row p {
   margin: 0;
   color: var(--muted);
 }
@@ -126,13 +142,26 @@
 }
 
 .archive-check,
-.open-check {
+.open-check,
+.product-active-check {
   min-height: 48px;
+}
+
+.product-active-check {
+  flex-shrink: 0;
+  font-weight: 800;
+}
+
+.product-active-check input {
+  width: 24px;
+  height: 24px;
+  accent-color: var(--success);
 }
 
 @media (max-width: 760px) {
   .admin-toolbar,
   .pickup-date-row,
+  .admin-product-row,
   .order-heading,
   .admin-items div {
     display: grid;

@@ -118,6 +118,8 @@ Prices are stored in cents:
 
 Set `active` to `false` to hide a bread without deleting it.
 
+Admins can also turn products on or off from `admin.html` under Weekly menu availability. Turning a product off sets `active = false`, so it disappears from the public order page without deleting the row.
+
 The storefront sorts product cards inside each category from lowest price to highest price, then alphabetically when prices match. Grouped choices use `sort_order` first, then `option_label`, so you can place `Plain` before flavored granola or `2 oz` before larger sizes.
 
 Use `image_url` to show a product photo. Put the image file in the repository `assets` folder, commit it to GitHub, then enter a relative path like:
