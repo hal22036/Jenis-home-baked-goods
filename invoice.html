@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Order Invoice | Jeni's Home Baked Goods</title>
+  <link rel="stylesheet" href="styles.css?v=20260808-admin-invoices" />
+</head>
+<body class="invoice-page">
+  <main class="wrap invoice-shell">
+    <section class="panel printable-invoice">
+      <div class="invoice-page-header">
+        <img class="invoice-logo" src="assets/logo.png" alt="Jeni's Home Baked Goods logo" />
+        <div>
+          <p class="step">Order invoice</p>
+          <h1>Jeni's Home Baked Goods</h1>
+        </div>
+      </div>
+
+      <p id="invoice-message" class="message" role="status">Loading invoice...</p>
+      <div id="invoice-content" hidden></div>
+
+      <div class="invoice-page-actions">
+        <button class="secondary-button" type="button" onclick="window.print()">Print / save PDF</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="invoice.js?v=20260808-admin-invoices"></script>
+</body>
+</html>

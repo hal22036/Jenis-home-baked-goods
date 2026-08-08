@@ -51,6 +51,16 @@ function prettyDate(dateString) {
   });
 }
 
+function prettyDateTime(value) {
+  return new Date(value).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
+}
+
 function setMessage(target, message = "", type = "") {
   target.textContent = message;
   target.className = type ? `message ${type}` : "message";
@@ -148,6 +158,7 @@ function renderOrders() {
       </div>
 
       <dl class="admin-details">
+        <div><dt>Order placed</dt><dd>${prettyDateTime(order.created_at)}</dd></div>
         <div><dt>Phone</dt><dd><a href="tel:${order.customer_phone}">${order.customer_phone}</a></dd></div>
         <div><dt>Email</dt><dd>${order.customer_email ? `<a href="mailto:${order.customer_email}">${order.customer_email}</a>` : "Not provided"}</dd></div>
         <div><dt>Payment</dt><dd>${paymentLabel(order.payment_method)}</dd></div>
@@ -191,9 +202,14 @@ function renderOrders() {
         </label>
       </div>
 
-      <button class="secondary-button" type="button" data-save-order>
-        Save order status
-      </button>
+      <div class="admin-order-actions">
+        <a class="secondary-button compact-button" href="invoice.html?order=${encodeURIComponent(order.order_code)}" target="_blank" rel="noopener">
+          View invoice
+        </a>
+        <button class="secondary-button compact-button" type="button" data-save-order>
+          Save order status
+        </button>
+      </div>
       <p class="message" data-order-message></p>
     </article>
   `).join("");
@@ -248,7 +264,7 @@ async function saveOrderStatus(event) {
   }
 
   setMessage(message, "Saved.", "success");
-  await loadOrders();
+  await Promise.all([loadOrders(), loadPickupDates()]);
 }
 
 async function loadPickupDates() {

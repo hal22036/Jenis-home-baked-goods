@@ -13,6 +13,8 @@ Production-ready starter for a small bakery using GitHub Pages for the frontend 
 - Prevents overselling with a Supabase transaction function that locks the selected pickup-date row before checking capacity.
 - Shows customers a short order code for payment notes instead of a long database ID.
 - Keeps email optional unless the customer requests an emailed receipt; phone number is required.
+- Lets the admin open a screenshot-friendly invoice from each order.
+- Canceled orders no longer count against pickup-date loaf capacity.
 - Accepts Venmo, Zelle, PayPal, CashApp, and Cash at Pickup instructions only.
 - Does not accept or process credit cards.
 - Keeps bakery name, intro text, pickup note, and payment links in one owner-friendly settings block in `app.js`.

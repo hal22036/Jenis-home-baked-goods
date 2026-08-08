@@ -141,6 +141,16 @@
   margin-top: 14px;
 }
 
+.admin-order-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.admin-order-actions .compact-button {
+  flex: 1 1 0;
+}
+
 .archive-check,
 .open-check,
 .product-active-check {
@@ -168,8 +178,13 @@
   }
 
   .toolbar-actions,
-  .compact-button {
+  .compact-button,
+  .admin-order-actions {
     width: 100%;
+  }
+
+  .admin-order-actions {
+    display: grid;
   }
 
   .compact-button {

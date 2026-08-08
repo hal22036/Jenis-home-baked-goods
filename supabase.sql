@@ -152,6 +152,7 @@ select
   coalesce(sum(o.total_loaves), 0)::integer as ordered_count
 from public.pickup_dates d
 left join public.orders o on o.pickup_date_id = d.id
+  and o.fulfillment_status <> 'canceled'
 group by d.id, d.pickup_date, d.capacity, d.is_open;
 
 -- Products are intentionally not seeded automatically.
@@ -229,6 +230,7 @@ using (public.is_admin());
 
 drop function if exists public.place_order(uuid,text,text,text,text,text,jsonb);
 drop function if exists public.place_order(uuid,text,text,text,text,text,boolean,jsonb);
+drop function if exists public.get_order_invoice(text);
 drop function if exists public.update_order_payment_method(uuid,text,text);
 drop function if exists public.update_order_payment_method(text,text);
 drop function if exists public.admin_list_orders(boolean);
@@ -319,7 +321,8 @@ begin
   select coalesce(sum(total_loaves), 0)::integer
   into v_current
   from orders
-  where pickup_date_id = p_pickup_date_id;
+  where pickup_date_id = p_pickup_date_id
+    and fulfillment_status <> 'canceled';
 
   v_total := 0;
   v_item_count := 0;
@@ -434,6 +437,64 @@ begin
   select orders.id, orders.order_code, orders.payment_method
   from orders
   where orders.order_code = upper(trim(p_order_code));
+end;
+$$;
+
+create or replace function public.get_order_invoice(
+  p_order_code text
+)
+returns table(
+  order_code text,
+  pickup_date date,
+  customer_name text,
+  customer_email text,
+  customer_phone text,
+  notes text,
+  payment_method text,
+  invoice_requested boolean,
+  total_cents integer,
+  total_loaves integer,
+  created_at timestamptz,
+  items jsonb
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  return query
+  select
+    o.order_code,
+    d.pickup_date,
+    o.customer_name,
+    o.customer_email,
+    o.customer_phone,
+    o.notes,
+    o.payment_method,
+    o.invoice_requested,
+    o.total_cents,
+    o.total_loaves,
+    o.created_at,
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'name', p.name,
+          'quantity', oi.quantity,
+          'unit_price_cents', oi.unit_price_cents,
+          'display_group', p.display_group,
+          'option_label', p.option_label,
+          'image_url', p.image_url
+        )
+        order by coalesce(p.display_group, p.name), p.sort_order, coalesce(p.option_label, p.name), p.name
+      ) filter (where oi.id is not null),
+      '[]'::jsonb
+    ) as items
+  from public.orders o
+  join public.pickup_dates d on d.id = o.pickup_date_id
+  left join public.order_items oi on oi.order_id = o.id
+  left join public.products p on p.id = oi.product_id
+  where o.order_code = upper(trim(p_order_code))
+  group by o.id, d.pickup_date;
 end;
 $$;
 
@@ -705,6 +766,9 @@ $$;
 
 revoke all on function public.place_order(uuid,text,text,text,text,text,boolean,jsonb) from public;
 grant execute on function public.place_order(uuid,text,text,text,text,text,boolean,jsonb) to anon, authenticated;
+
+revoke all on function public.get_order_invoice(text) from public;
+grant execute on function public.get_order_invoice(text) to anon, authenticated;
 
 revoke all on function public.update_order_payment_method(text,text) from public;
 grant execute on function public.update_order_payment_method(text,text) to anon, authenticated;
