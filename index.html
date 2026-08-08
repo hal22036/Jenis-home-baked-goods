@@ -9,7 +9,7 @@
   />
   <title>Bakery Bread Orders</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
-  <link rel="stylesheet" href="styles.css?v=20260808-payment-required" />
+  <link rel="stylesheet" href="styles.css?v=20260808-summary-note" />
 </head>
 <body>
   <header class="site-header">
@@ -101,9 +101,9 @@
     </section>
 
     <section class="panel" id="review-section" aria-labelledby="review-heading" hidden>
+      <p class="checkout-note"><strong>Review your invoice, then place your order below to check out.</strong></p>
       <p class="step">Review order</p>
       <h2 id="review-heading">Invoice summary</h2>
-      <p class="checkout-note">Review your invoice, then place your order below to check out.</p>
       <div id="review-content"></div>
       <label class="inline-check invoice-request">
         <input id="invoice-requested" type="checkbox" />
@@ -128,6 +128,6 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20260808-payment-required"></script>
+  <script src="app.js?v=20260808-summary-note"></script>
 </body>
 </html>
