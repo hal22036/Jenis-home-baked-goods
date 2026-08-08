@@ -107,29 +107,33 @@ from public.pickup_dates d
 left join public.orders o on o.pickup_date_id = d.id
 group by d.id, d.pickup_date, d.capacity, d.is_open;
 
--- Example products. Change these to match your menu.
-insert into public.products (name, description, price_cents, capacity_units, category, sort_order)
-select seed.name, seed.description, seed.price_cents, seed.capacity_units, seed.category, seed.sort_order
-from (
-  values
-    ('White Bread', 'Classic soft loaf.', 1000, 1, 'Everyday', 1),
-    ('Honey Oat', 'Soft loaf with honey and oats.', 1200, 1, 'Everyday', 2),
-    ('Jalapeno Cheddar', 'Savory loaf with jalapeno and cheddar.', 1400, 1, 'Turn Up the Heat', 3),
-    ('Cinnamon Raisin', 'Sweet cinnamon loaf with raisins.', 1300, 1, 'Sweet', 4)
-) as seed(name, description, price_cents, capacity_units, category, sort_order)
-where not exists (
-  select 1
-  from public.products p
-  where lower(p.name) = lower(seed.name)
-);
+-- Products are intentionally not seeded automatically.
+-- Add only your real menu items in Table Editor -> products.
+-- Example:
+-- insert into public.products (
+--   name,
+--   description,
+--   price_cents,
+--   capacity_units,
+--   category,
+--   sort_order
+-- )
+-- values (
+--   'White Bread',
+--   'Classic soft loaf.',
+--   1000,
+--   1,
+--   'Everyday',
+--   1
+-- )
+-- on conflict do nothing;
 
--- Example pickup dates. Replace these.
-insert into public.pickup_dates (pickup_date, capacity)
-values
-  (current_date + 7, 14),
-  (current_date + 14, 14),
-  (current_date + 21, 14)
-on conflict (pickup_date) do nothing;
+-- Pickup dates are intentionally not seeded automatically.
+-- Add only the Fridays you want to offer in Table Editor -> pickup_dates.
+-- Example:
+-- insert into public.pickup_dates (pickup_date, capacity, is_open)
+-- values ('2026-08-14', 14, true)
+-- on conflict (pickup_date) do nothing;
 
 -- RLS
 alter table public.products enable row level security;

@@ -93,6 +93,8 @@ For Zelle, many bakeries leave `link` blank and use the instructions text.
 
 In Supabase, open Table Editor -> `products`.
 
+The SQL setup file does not auto-create products, so rerunning it will not bring back starter menu items.
+
 Edit:
 
 - `name`
@@ -127,7 +129,7 @@ Use `category` to group the order screen. Built-in category order:
 
 Open Table Editor -> `pickup_dates`.
 
-Add one row per pickup date:
+Add one row per Friday pickup date:
 
 | pickup_date | capacity | is_open |
 |---|---:|---|
@@ -137,6 +139,8 @@ Add one row per pickup date:
 Each date tracks its own capacity. One date selling out does not affect another date.
 
 To close ordering for a date, set `is_open` to `false`.
+
+The SQL setup file does not auto-create pickup dates, so rerunning it will not add accidental Saturday dates.
 
 Orders automatically close at 5 PM on the Wednesday before each pickup date. For a Friday pickup, customers can order until Wednesday at 4:59 PM; at 5:00 PM the date will no longer appear.
 
