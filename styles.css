@@ -60,18 +60,6 @@ button {
   filter: drop-shadow(0 12px 22px rgba(74, 47, 24, 0.12));
 }
 
-.hero-image {
-  width: 100%;
-  max-width: 860px;
-  aspect-ratio: 16 / 7;
-  object-fit: cover;
-  object-position: center 58%;
-  display: block;
-  margin: 0 auto;
-  border-radius: 8px;
-  box-shadow: var(--shadow);
-}
-
 .eyebrow,
 .step {
   margin: 0 0 6px;
@@ -448,11 +436,6 @@ button[type="submit"]:disabled {
 
   .site-logo {
     width: min(180px, 54vw);
-  }
-
-  .hero-image {
-    aspect-ratio: 4 / 3;
-    object-position: center 55%;
   }
 
   .section-row,
