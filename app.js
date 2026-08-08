@@ -528,6 +528,9 @@ function showSuccess(result, paymentMethod) {
     <button class="copy-button" type="button" data-copy-order-code="${result.order_code}">
       Copy order code
     </button>
+    <button class="secondary-button" type="button" id="make-another-order">
+      Make another order
+    </button>
     <div class="pickup-details">
       <h3>Pickup details</h3>
       <p>
@@ -565,12 +568,31 @@ function showSuccess(result, paymentMethod) {
     .querySelector("[data-copy-order-code]")
     .addEventListener("click", copyOrderCode);
   el.successContent
+    .querySelector("#make-another-order")
+    .addEventListener("click", startAnotherOrder);
+  el.successContent
     .querySelector("#save-payment-method")
     .addEventListener("click", saveSuccessPaymentMethod);
 
   renderSuccessPaymentDetails(paymentMethod);
   el.form.reset();
   state.quantities = {};
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+async function startAnotherOrder() {
+  state.lastOrder = null;
+  state.selectedDate = null;
+  state.quantities = {};
+
+  el.successSection.hidden = true;
+  el.dateSection.hidden = false;
+  el.menuSection.hidden = true;
+  el.customerSection.hidden = true;
+  el.successContent.innerHTML = "";
+  el.copyMessage.textContent = "";
+
+  await loadStore();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
