@@ -7,8 +7,11 @@ Production-ready starter for a small bakery using GitHub Pages for the frontend 
 - Shows only open future pickup dates.
 - Closes ordering the Wednesday at 5 PM before each pickup date.
 - Gives every pickup date its own capacity, defaulting to 14 total loaves.
+- Lets non-loaf products use `capacity_units = 0` so they do not count against the loaf limit.
+- Groups products into owner-editable menu categories.
 - Lets customers mix bread varieties while still counting against the same date capacity.
 - Prevents overselling with a Supabase transaction function that locks the selected pickup-date row before checking capacity.
+- Shows customers a short order code for payment notes instead of a long database ID.
 - Accepts Venmo, Zelle, PayPal, CashApp, and Cash at Pickup instructions only.
 - Does not accept or process credit cards.
 - Keeps bakery name, intro text, pickup note, and payment links in one owner-friendly settings block in `app.js`.
@@ -91,6 +94,8 @@ Edit:
 - `name`
 - `description`
 - `price_cents`
+- `capacity_units`
+- `category`
 - `active`
 - `sort_order`
 
@@ -100,6 +105,19 @@ Prices are stored in cents:
 - `$12.50` = `1250`
 
 Set `active` to `false` to hide a bread without deleting it.
+
+Use `capacity_units` to decide whether a product counts against pickup capacity:
+
+- Bread loaves: `1`
+- Add-ons or non-loaf products: `0`
+
+Use `category` to group the order screen. Built-in category order:
+
+- `Everyday`
+- `Sweet`
+- `Savory`
+- `Turn Up the Heat`
+- `Other Delicious Treats`
 
 ## 5. Add Pickup Dates
 

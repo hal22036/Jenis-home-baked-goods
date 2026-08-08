@@ -19,26 +19,33 @@ const STORE_SETTINGS = {
   orderCutoffWeekday: 3, // 0 = Sunday, 3 = Wednesday.
   orderCutoffHour: 17,
   bakeryTimeZone: "America/Los_Angeles",
+  categoryOrder: [
+    "Everyday",
+    "Sweet",
+    "Savory",
+    "Turn Up the Heat",
+    "Other Delicious Treats"
+  ],
   paymentOptions: {
     Venmo: {
       label: "Venmo",
       link: "https://venmo.com/u/Jeni-Hales",
-      instructions: "Send payment by Venmo and include your order number in the note."
+      instructions: "Send payment by Venmo and include your order code in the note."
     },
     Zelle: {
       label: "Zelle",
       link: "",
-      instructions: "Send payment by Zelle to 801-602-8443. Add your order number in the memo."
+      instructions: "Send payment by Zelle to 801-602-8443. Add your order code in the memo."
     },
     PayPal: {
       label: "PayPal",
       link: "https://paypal.me/JeniHales",
-      instructions: "Send payment by PayPal and include your order number in the note."
+      instructions: "Send payment by PayPal and include your order code in the note."
     },
     CashApp: {
       label: "CashApp",
       link: "https://cash.app/$JeniHales10",
-      instructions: "Send payment by CashApp and include your order number in the note."
+      instructions: "Send payment by CashApp and include your order code in the note."
     },
     CashAtPickup: {
       label: "Cash at Pickup",
@@ -76,6 +83,7 @@ const el = {
   submit: document.querySelector("#submit-order"),
   successSection: document.querySelector("#success-section"),
   successContent: document.querySelector("#success-content"),
+  copyMessage: document.querySelector("#copy-message"),
   paymentChoices: document.querySelector("#payment-choices")
 };
 
@@ -153,10 +161,29 @@ function selectedQuantity() {
   return Object.values(state.quantities).reduce((sum, qty) => sum + qty, 0);
 }
 
+function capacityUnitsFor(product) {
+  return Number.isInteger(product.capacity_units) ? product.capacity_units : 1;
+}
+
+function selectedCapacityUnits() {
+  return state.products.reduce((sum, product) => {
+    return sum + (state.quantities[product.id] || 0) * capacityUnitsFor(product);
+  }, 0);
+}
+
 function selectedTotalCents() {
   return state.products.reduce((sum, product) => {
     return sum + (state.quantities[product.id] || 0) * product.price_cents;
   }, 0);
+}
+
+function categoryFor(product) {
+  return product.category || "Everyday";
+}
+
+function categorySortIndex(category) {
+  const index = STORE_SETTINGS.categoryOrder.indexOf(category);
+  return index === -1 ? STORE_SETTINGS.categoryOrder.length : index;
 }
 
 function remainingFor(date) {
@@ -212,6 +239,7 @@ async function loadStore() {
         .from("products")
         .select("*")
         .eq("active", true)
+        .order("category", { ascending: true })
         .order("sort_order", { ascending: true })
     ]);
 
@@ -278,7 +306,35 @@ function renderProducts() {
     return;
   }
 
-  state.products.forEach(product => {
+  const productsByCategory = state.products
+    .slice()
+    .sort((a, b) => {
+      const categoryDifference =
+        categorySortIndex(categoryFor(a)) - categorySortIndex(categoryFor(b));
+
+      if (categoryDifference !== 0) return categoryDifference;
+      return a.sort_order - b.sort_order;
+    })
+    .reduce((groups, product) => {
+      const category = categoryFor(product);
+      if (!groups.has(category)) groups.set(category, []);
+      groups.get(category).push(product);
+      return groups;
+    }, new Map());
+
+  productsByCategory.forEach((products, category) => {
+    const categorySection = document.createElement("section");
+    categorySection.className = "product-category";
+    categorySection.innerHTML = `
+      <div class="category-heading">
+        <h3>${category}</h3>
+      </div>
+      <div class="category-grid"></div>
+    `;
+
+    const categoryGrid = categorySection.querySelector(".category-grid");
+
+    products.forEach(product => {
     state.quantities[product.id] = state.quantities[product.id] || 0;
 
     const card = document.createElement("article");
@@ -288,6 +344,9 @@ function renderProducts() {
       <div>
         <h3>${product.name}</h3>
         <p>${product.description || ""}</p>
+        <span class="product-meta">
+          ${capacityUnitsFor(product) > 0 ? "Counts toward loaf capacity" : "Does not count toward loaf capacity"}
+        </span>
       </div>
       <div class="product-bottom">
         <strong>${money(product.price_cents)}</strong>
@@ -306,7 +365,9 @@ function renderProducts() {
     function syncQuantity() {
       qtyEl.textContent = state.quantities[product.id];
       minusButton.disabled = state.quantities[product.id] === 0;
-      plusButton.disabled = selectedQuantity() >= remainingForSelectedDate();
+      plusButton.disabled =
+        capacityUnitsFor(product) > 0 &&
+        selectedCapacityUnits() + capacityUnitsFor(product) > remainingForSelectedDate();
     }
 
     minusButton.addEventListener("click", () => {
@@ -319,8 +380,12 @@ function renderProducts() {
 
     plusButton.addEventListener("click", () => {
       const remaining = remainingForSelectedDate();
+      const productCapacity = capacityUnitsFor(product);
 
-      if (selectedQuantity() >= remaining) {
+      if (
+        productCapacity > 0 &&
+        selectedCapacityUnits() + productCapacity > remaining
+      ) {
         setMessage(
           `Only ${remaining} loaf spot${remaining === 1 ? "" : "s"} remain for this pickup date.`,
           "error"
@@ -335,7 +400,10 @@ function renderProducts() {
     });
 
     syncQuantity();
-    el.productList.appendChild(card);
+    categoryGrid.appendChild(card);
+    });
+
+    el.productList.appendChild(categorySection);
   });
 }
 
@@ -343,7 +411,7 @@ function updateSummary() {
   if (!state.selectedDate) return;
 
   const remaining = remainingForSelectedDate();
-  const count = selectedQuantity();
+  const count = selectedCapacityUnits();
 
   el.capacityMessage.textContent =
     `${remaining} of ${state.selectedDate.capacity} loaf spots are currently available for ${prettyDate(state.selectedDate.pickup_date)}.`;
@@ -450,17 +518,51 @@ function showSuccess(result, paymentMethod) {
   el.successContent.innerHTML = `
     <dl class="receipt">
       <div><dt>Pickup</dt><dd>${prettyDate(state.selectedDate.pickup_date)}</dd></div>
-      <div><dt>Order number</dt><dd>${result.order_id}</dd></div>
+      <div><dt>Order code</dt><dd>${result.order_code}</dd></div>
       <div><dt>Total</dt><dd>${money(result.total_cents)}</dd></div>
       <div><dt>Payment</dt><dd>${payment.label}</dd></div>
     </dl>
+    <button class="copy-button" type="button" data-copy-order-code="${result.order_code}">
+      Copy order code
+    </button>
     <p>${payment.instructions}</p>
     ${paymentAction}
   `;
 
+  el.successContent
+    .querySelector("[data-copy-order-code]")
+    .addEventListener("click", copyOrderCode);
+
   el.form.reset();
   state.quantities = {};
   window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+async function copyOrderCode(event) {
+  const orderCode = event.currentTarget.dataset.copyOrderCode;
+
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(orderCode);
+    } else {
+      const textarea = document.createElement("textarea");
+      textarea.value = orderCode;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      textarea.remove();
+    }
+
+    el.copyMessage.textContent = "Order code copied.";
+    el.copyMessage.className = "message success";
+  } catch (error) {
+    console.error(error);
+    el.copyMessage.textContent = "Could not copy automatically. Select the order code and copy it manually.";
+    el.copyMessage.className = "message error";
+  }
 }
 
 loadStore();

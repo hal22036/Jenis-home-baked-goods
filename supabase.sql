@@ -7,6 +7,8 @@ create table if not exists public.products (
   name text not null,
   description text,
   price_cents integer not null check (price_cents >= 0),
+  capacity_units integer not null default 1 check (capacity_units >= 0),
+  category text not null default 'Everyday',
   active boolean not null default true,
   sort_order integer not null default 0
 );
@@ -20,6 +22,7 @@ create table if not exists public.pickup_dates (
 
 create table if not exists public.orders (
   id uuid primary key default gen_random_uuid(),
+  order_code text not null unique default upper(substr(encode(gen_random_bytes(6), 'hex'), 1, 8)),
   pickup_date_id uuid not null references public.pickup_dates(id),
   customer_name text not null,
   customer_email text not null,
@@ -27,7 +30,7 @@ create table if not exists public.orders (
   notes text,
   payment_method text not null check (payment_method in ('Venmo','Zelle','PayPal','CashApp','CashAtPickup')),
   total_cents integer not null default 0,
-  total_loaves integer not null check (total_loaves > 0),
+  total_loaves integer not null check (total_loaves >= 0),
   created_at timestamptz not null default now()
 );
 
@@ -49,12 +52,48 @@ on public.orders (pickup_date_id);
 create index if not exists idx_order_items_order_id
 on public.order_items (order_id);
 
+alter table public.products
+add column if not exists capacity_units integer not null default 1;
+
+alter table public.products
+add column if not exists category text not null default 'Everyday';
+
+alter table public.products
+drop constraint if exists products_capacity_units_check;
+
+alter table public.products
+add constraint products_capacity_units_check
+check (capacity_units >= 0);
+
+alter table public.orders
+drop constraint if exists orders_total_loaves_check;
+
+alter table public.orders
+add constraint orders_total_loaves_check
+check (total_loaves >= 0);
+
 alter table public.orders
 drop constraint if exists orders_payment_method_check;
 
 alter table public.orders
 add constraint orders_payment_method_check
 check (payment_method in ('Venmo','Zelle','PayPal','CashApp','CashAtPickup'));
+
+alter table public.orders
+add column if not exists order_code text;
+
+update public.orders
+set order_code = upper(substr(encode(gen_random_bytes(6), 'hex'), 1, 8))
+where order_code is null;
+
+alter table public.orders
+alter column order_code set not null;
+
+alter table public.orders
+alter column order_code set default upper(substr(encode(gen_random_bytes(6), 'hex'), 1, 8));
+
+create unique index if not exists idx_orders_order_code
+on public.orders (order_code);
 
 -- Public read-only view showing availability without exposing customer data.
 create or replace view public.pickup_date_status as
@@ -69,15 +108,15 @@ left join public.orders o on o.pickup_date_id = d.id
 group by d.id, d.pickup_date, d.capacity, d.is_open;
 
 -- Example products. Change these to match your menu.
-insert into public.products (name, description, price_cents, sort_order)
-select seed.name, seed.description, seed.price_cents, seed.sort_order
+insert into public.products (name, description, price_cents, capacity_units, category, sort_order)
+select seed.name, seed.description, seed.price_cents, seed.capacity_units, seed.category, seed.sort_order
 from (
   values
-    ('White Bread', 'Classic soft loaf.', 1000, 1),
-    ('Honey Oat', 'Soft loaf with honey and oats.', 1200, 2),
-    ('Jalapeno Cheddar', 'Savory loaf with jalapeno and cheddar.', 1400, 3),
-    ('Cinnamon Raisin', 'Sweet cinnamon loaf with raisins.', 1300, 4)
-) as seed(name, description, price_cents, sort_order)
+    ('White Bread', 'Classic soft loaf.', 1000, 1, 'Everyday', 1),
+    ('Honey Oat', 'Soft loaf with honey and oats.', 1200, 1, 'Everyday', 2),
+    ('Jalapeno Cheddar', 'Savory loaf with jalapeno and cheddar.', 1400, 1, 'Turn Up the Heat', 3),
+    ('Cinnamon Raisin', 'Sweet cinnamon loaf with raisins.', 1300, 1, 'Sweet', 4)
+) as seed(name, description, price_cents, capacity_units, category, sort_order)
 where not exists (
   select 1
   from public.products p
@@ -111,6 +150,8 @@ using (true);
 -- The browser is NOT allowed to insert orders directly.
 -- Orders are created only through the function below.
 
+drop function if exists public.place_order(uuid,text,text,text,text,text,jsonb);
+
 create or replace function public.place_order(
   p_pickup_date_id uuid,
   p_customer_name text,
@@ -120,7 +161,7 @@ create or replace function public.place_order(
   p_payment_method text,
   p_items jsonb
 )
-returns table(order_id uuid, total_cents integer)
+returns table(order_id uuid, order_code text, total_cents integer)
 language plpgsql
 security definer
 set search_path = public
@@ -130,9 +171,13 @@ declare
   v_current integer;
   v_requested integer;
   v_total integer;
+  v_item_count integer;
   v_order_id uuid;
+  v_order_code text;
   v_item jsonb;
+  v_quantity integer;
   v_price integer;
+  v_capacity_units integer;
 begin
   if p_payment_method not in ('Venmo', 'Zelle', 'PayPal', 'CashApp', 'CashAtPickup') then
     raise exception 'Invalid payment method';
@@ -181,25 +226,17 @@ begin
   from orders
   where pickup_date_id = p_pickup_date_id;
 
-  select coalesce(sum((item->>'quantity')::integer), 0)::integer
-  into v_requested
-  from jsonb_array_elements(p_items) item;
-
-  if v_requested <= 0 then
-    raise exception 'Order must contain at least one loaf';
-  end if;
-
-  if v_current + v_requested > v_capacity then
-    raise exception 'Not enough capacity';
-  end if;
-
   v_total := 0;
+  v_item_count := 0;
+  v_requested := 0;
 
   for v_item in
     select * from jsonb_array_elements(p_items)
   loop
-    select price_cents
-    into v_price
+    v_quantity := (v_item->>'quantity')::integer;
+
+    select price_cents, capacity_units
+    into v_price, v_capacity_units
     from products
     where id = (v_item->>'product_id')::uuid
       and active = true;
@@ -208,8 +245,18 @@ begin
       raise exception 'Invalid product';
     end if;
 
-    v_total := v_total + v_price * (v_item->>'quantity')::integer;
+    v_total := v_total + v_price * v_quantity;
+    v_item_count := v_item_count + v_quantity;
+    v_requested := v_requested + v_capacity_units * v_quantity;
   end loop;
+
+  if v_item_count <= 0 then
+    raise exception 'Order must contain at least one item';
+  end if;
+
+  if v_current + v_requested > v_capacity then
+    raise exception 'Not enough capacity';
+  end if;
 
   insert into orders (
     pickup_date_id,
@@ -233,6 +280,11 @@ begin
   )
   returning id into v_order_id;
 
+  select orders.order_code
+  into v_order_code
+  from orders
+  where id = v_order_id;
+
   for v_item in
     select * from jsonb_array_elements(p_items)
   loop
@@ -255,7 +307,7 @@ begin
     );
   end loop;
 
-  return query select v_order_id, v_total;
+  return query select v_order_id, v_order_code, v_total;
 end;
 $$;
 
