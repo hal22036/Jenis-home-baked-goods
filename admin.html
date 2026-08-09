@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bakery Admin | Jeni's Home Baked Goods</title>
-  <link rel="stylesheet" href="styles.css?v=20260808-admin-receipt-email" />
-  <link rel="stylesheet" href="admin.css?v=20260808-admin-receipt-email" />
+  <link rel="stylesheet" href="styles.css?v=20260808-order-filters" />
+  <link rel="stylesheet" href="admin.css?v=20260808-order-filters" />
 </head>
 <body>
   <header class="site-header admin-header">
@@ -47,6 +47,25 @@
           <button class="secondary-button compact-button" type="button" id="refresh-orders">Refresh</button>
           <button class="secondary-button compact-button" type="button" id="admin-sign-out">Sign out</button>
         </div>
+      </div>
+      <div class="order-filters" aria-label="Order filters">
+        <label>
+          Pickup date
+          <select id="order-pickup-filter">
+            <option value="all">All pickup dates</option>
+          </select>
+        </label>
+        <label>
+          Invoice status
+          <select id="order-invoice-filter">
+            <option value="all">All invoice statuses</option>
+            <option value="needs-invoice">Needs invoice sent</option>
+            <option value="requested">Requested</option>
+            <option value="sent">Sent</option>
+            <option value="not-requested">Not requested</option>
+          </select>
+        </label>
+        <button class="secondary-button compact-button" type="button" id="clear-order-filters">Clear filters</button>
       </div>
       <p id="admin-message" class="message" role="status"></p>
       <div id="orders-list" class="orders-list"></div>
@@ -97,6 +116,6 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="admin.js?v=20260808-admin-receipt-email"></script>
+  <script src="admin.js?v=20260808-order-filters"></script>
 </body>
 </html>

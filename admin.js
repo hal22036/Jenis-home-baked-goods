@@ -23,6 +23,9 @@ const el = {
   pickupDatesList: document.querySelector("#pickup-dates-list"),
   productsList: document.querySelector("#products-list"),
   includeArchived: document.querySelector("#include-archived"),
+  orderPickupFilter: document.querySelector("#order-pickup-filter"),
+  orderInvoiceFilter: document.querySelector("#order-invoice-filter"),
+  clearOrderFilters: document.querySelector("#clear-order-filters"),
   refreshOrders: document.querySelector("#refresh-orders"),
   refreshProducts: document.querySelector("#refresh-products"),
   signOut: document.querySelector("#admin-sign-out"),
@@ -123,6 +126,13 @@ el.refreshOrders.addEventListener("click", () => {
 el.refreshProducts.addEventListener("click", loadProducts);
 
 el.includeArchived.addEventListener("change", loadOrders);
+el.orderPickupFilter.addEventListener("change", renderOrders);
+el.orderInvoiceFilter.addEventListener("change", renderOrders);
+el.clearOrderFilters.addEventListener("click", () => {
+  el.orderPickupFilter.value = "all";
+  el.orderInvoiceFilter.value = "all";
+  renderOrders();
+});
 
 async function loadOrders() {
   setMessage(el.adminMessage, "Loading orders...");
@@ -137,17 +147,89 @@ async function loadOrders() {
   }
 
   state.orders = data || [];
+  renderOrderFilters();
   renderOrders();
-  setMessage(el.adminMessage, `${state.orders.length} order${state.orders.length === 1 ? "" : "s"} shown.`, "success");
+}
+
+function renderOrderFilters() {
+  const selectedPickupDate = el.orderPickupFilter.value;
+  const pickupDates = [...new Set(state.orders.map(order => order.pickup_date))]
+    .sort((a, b) => a.localeCompare(b));
+
+  el.orderPickupFilter.innerHTML = `
+    <option value="all">All pickup dates</option>
+    ${pickupDates.map(date => `<option value="${date}">${prettyDate(date)}</option>`).join("")}
+  `;
+
+  if (selectedPickupDate === "all" || pickupDates.includes(selectedPickupDate)) {
+    el.orderPickupFilter.value = selectedPickupDate;
+  }
+}
+
+function filteredOrders() {
+  return state.orders.filter(order => {
+    const pickupDateMatches =
+      el.orderPickupFilter.value === "all" || order.pickup_date === el.orderPickupFilter.value;
+    const invoiceMatches = invoiceFilterMatches(order, el.orderInvoiceFilter.value);
+
+    return pickupDateMatches && invoiceMatches;
+  });
+}
+
+function invoiceFilterMatches(order, filter) {
+  if (filter === "needs-invoice") return order.invoice_requested && !order.invoice_sent;
+  if (filter === "requested") return order.invoice_requested;
+  if (filter === "sent") return order.invoice_sent;
+  if (filter === "not-requested") return !order.invoice_requested;
+  return true;
 }
 
 function renderOrders() {
+  const orders = filteredOrders();
+
   if (!state.orders.length) {
     el.ordersList.innerHTML = "<p class=\"muted\">No orders to show.</p>";
+    setMessage(el.adminMessage, "0 orders shown.", "success");
     return;
   }
 
-  el.ordersList.innerHTML = state.orders.map(order => `
+  if (!orders.length) {
+    el.ordersList.innerHTML = "<p class=\"muted\">No orders match those filters.</p>";
+    setMessage(el.adminMessage, `0 of ${state.orders.length} orders shown.`, "success");
+    return;
+  }
+
+  const ordersByPickupDate = orders.reduce((groups, order) => {
+    if (!groups.has(order.pickup_date)) groups.set(order.pickup_date, []);
+    groups.get(order.pickup_date).push(order);
+    return groups;
+  }, new Map());
+
+  el.ordersList.innerHTML = [...ordersByPickupDate.entries()].map(([pickupDate, dateOrders]) => `
+    <section class="order-date-group">
+      <div class="order-date-heading">
+        <h3>${prettyDate(pickupDate)}</h3>
+        <span>${dateOrders.length} order${dateOrders.length === 1 ? "" : "s"}</span>
+      </div>
+      <div class="orders-list">
+        ${dateOrders.map(order => orderCardMarkup(order)).join("")}
+      </div>
+    </section>
+  `).join("");
+
+  setMessage(
+    el.adminMessage,
+    `${orders.length} of ${state.orders.length} order${state.orders.length === 1 ? "" : "s"} shown.`,
+    "success"
+  );
+
+  el.ordersList.querySelectorAll("[data-save-order]").forEach(button => {
+    button.addEventListener("click", saveOrderStatus);
+  });
+}
+
+function orderCardMarkup(order) {
+  return `
     <article class="admin-order ${order.archived ? "is-archived" : ""}" data-order-id="${order.order_id}">
       <div class="order-heading">
         <div>
@@ -224,11 +306,7 @@ function renderOrders() {
       </div>
       <p class="message" data-order-message></p>
     </article>
-  `).join("");
-
-  el.ordersList.querySelectorAll("[data-save-order]").forEach(button => {
-    button.addEventListener("click", saveOrderStatus);
-  });
+  `;
 }
 
 function option(value, label, selected) {

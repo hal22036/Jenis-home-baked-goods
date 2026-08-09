@@ -24,6 +24,42 @@
   gap: 10px;
 }
 
+.order-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  align-items: end;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.order-date-group {
+  display: grid;
+  gap: 12px;
+}
+
+.order-date-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.order-date-heading h3 {
+  margin: 0;
+  color: var(--accent-dark);
+}
+
+.order-date-heading span {
+  color: var(--muted);
+  font-weight: 800;
+}
+
 .inline-check {
   display: inline-flex;
   align-items: center;
@@ -190,6 +226,10 @@
   }
 
   .admin-order-actions {
+    display: grid;
+  }
+
+  .order-date-heading {
     display: grid;
   }
 
