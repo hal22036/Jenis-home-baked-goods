@@ -162,8 +162,7 @@ function renderOrders() {
         <div><dt>Phone</dt><dd><a href="tel:${order.customer_phone}">${order.customer_phone}</a></dd></div>
         <div><dt>Email</dt><dd>${order.customer_email ? `<a href="mailto:${order.customer_email}">${order.customer_email}</a>` : "Not provided"}</dd></div>
         <div><dt>Payment</dt><dd>${paymentLabel(order.payment_method)}</dd></div>
-        <div><dt>Receipt email</dt><dd>${order.invoice_requested ? "Requested" : "Not requested"}</dd></div>
-        <div><dt>Invoice sent</dt><dd>${order.invoice_sent ? "Yes" : "No"}</dd></div>
+        <div><dt>Receipt email</dt><dd>${invoiceStatusLabel(order)}</dd></div>
         <div><dt>Loaf spots</dt><dd>${order.total_loaves}</dd></div>
       </dl>
 
@@ -244,6 +243,11 @@ function adminItemName(item) {
   }
 
   return item.name;
+}
+
+function invoiceStatusLabel(order) {
+  if (!order.invoice_requested) return "Not requested";
+  return order.invoice_sent ? "Requested and sent" : "Requested";
 }
 
 async function saveOrderStatus(event) {
