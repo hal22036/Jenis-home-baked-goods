@@ -163,6 +163,7 @@ function renderOrders() {
         <div><dt>Email</dt><dd>${order.customer_email ? `<a href="mailto:${order.customer_email}">${order.customer_email}</a>` : "Not provided"}</dd></div>
         <div><dt>Payment</dt><dd>${paymentLabel(order.payment_method)}</dd></div>
         <div><dt>Receipt email</dt><dd>${order.invoice_requested ? "Requested" : "Not requested"}</dd></div>
+        <div><dt>Invoice sent</dt><dd>${order.invoice_sent ? "Yes" : "No"}</dd></div>
         <div><dt>Loaf spots</dt><dd>${order.total_loaves}</dd></div>
       </dl>
 
@@ -199,6 +200,10 @@ function renderOrders() {
         <label class="inline-check archive-check">
           <input type="checkbox" data-archived ${order.archived ? "checked" : ""} />
           Archived
+        </label>
+        <label class="inline-check invoice-sent-check">
+          <input type="checkbox" data-invoice-sent ${order.invoice_sent ? "checked" : ""} />
+          Invoice sent
         </label>
       </div>
 
@@ -253,7 +258,8 @@ async function saveOrderStatus(event) {
     p_order_id: card.dataset.orderId,
     p_payment_status: card.querySelector("[data-payment-status]").value,
     p_fulfillment_status: card.querySelector("[data-fulfillment-status]").value,
-    p_archived: card.querySelector("[data-archived]").checked
+    p_archived: card.querySelector("[data-archived]").checked,
+    p_invoice_sent: card.querySelector("[data-invoice-sent]").checked
   });
 
   button.disabled = false;

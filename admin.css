@@ -152,6 +152,7 @@
 }
 
 .archive-check,
+.invoice-sent-check,
 .open-check,
 .product-active-check {
   min-height: 48px;

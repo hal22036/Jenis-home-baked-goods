@@ -35,6 +35,7 @@ create table if not exists public.orders (
   total_cents integer not null default 0,
   total_loaves integer not null check (total_loaves >= 0),
   invoice_requested boolean not null default false,
+  invoice_sent boolean not null default false,
   created_at timestamptz not null default now()
 );
 
@@ -72,6 +73,9 @@ add column if not exists archived boolean not null default false;
 
 alter table public.orders
 add column if not exists invoice_requested boolean not null default false;
+
+alter table public.orders
+add column if not exists invoice_sent boolean not null default false;
 
 alter table public.orders
 alter column customer_email drop not null;
@@ -235,6 +239,7 @@ drop function if exists public.update_order_payment_method(uuid,text,text);
 drop function if exists public.update_order_payment_method(text,text);
 drop function if exists public.admin_list_orders(boolean);
 drop function if exists public.admin_update_order_status(uuid,text,text,boolean);
+drop function if exists public.admin_update_order_status(uuid,text,text,boolean,boolean);
 drop function if exists public.admin_list_pickup_dates();
 drop function if exists public.admin_save_pickup_date(uuid,date,integer,boolean);
 drop function if exists public.admin_list_products();
@@ -514,6 +519,7 @@ returns table(
   fulfillment_status text,
   archived boolean,
   invoice_requested boolean,
+  invoice_sent boolean,
   total_cents integer,
   total_loaves integer,
   created_at timestamptz,
@@ -542,6 +548,7 @@ begin
     o.fulfillment_status,
     o.archived,
     o.invoice_requested,
+    o.invoice_sent,
     o.total_cents,
     o.total_loaves,
     o.created_at,
@@ -574,9 +581,10 @@ create or replace function public.admin_update_order_status(
   p_order_id uuid,
   p_payment_status text,
   p_fulfillment_status text,
-  p_archived boolean
+  p_archived boolean,
+  p_invoice_sent boolean
 )
-returns table(order_id uuid, payment_status text, fulfillment_status text, archived boolean)
+returns table(order_id uuid, payment_status text, fulfillment_status text, archived boolean, invoice_sent boolean)
 language plpgsql
 security definer
 set search_path = public
@@ -598,7 +606,8 @@ begin
   set
     payment_status = p_payment_status,
     fulfillment_status = p_fulfillment_status,
-    archived = p_archived
+    archived = p_archived,
+    invoice_sent = p_invoice_sent
   where id = p_order_id;
 
   if not found then
@@ -606,7 +615,7 @@ begin
   end if;
 
   return query
-  select o.id, o.payment_status, o.fulfillment_status, o.archived
+  select o.id, o.payment_status, o.fulfillment_status, o.archived, o.invoice_sent
   from orders o
   where o.id = p_order_id;
 end;
@@ -779,8 +788,8 @@ grant execute on function public.is_admin() to authenticated;
 revoke all on function public.admin_list_orders(boolean) from public;
 grant execute on function public.admin_list_orders(boolean) to authenticated;
 
-revoke all on function public.admin_update_order_status(uuid,text,text,boolean) from public;
-grant execute on function public.admin_update_order_status(uuid,text,text,boolean) to authenticated;
+revoke all on function public.admin_update_order_status(uuid,text,text,boolean,boolean) from public;
+grant execute on function public.admin_update_order_status(uuid,text,text,boolean,boolean) to authenticated;
 
 revoke all on function public.admin_list_pickup_dates() from public;
 grant execute on function public.admin_list_pickup_dates() to authenticated;
