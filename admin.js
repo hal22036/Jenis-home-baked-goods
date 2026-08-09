@@ -196,6 +196,14 @@ function renderOrders() {
             ${option("canceled", "Canceled", order.fulfillment_status)}
           </select>
         </label>
+        <label class="receipt-email-field">
+          Receipt email
+          <input data-customer-email type="email" value="${escapeAttribute(order.customer_email || "")}" placeholder="customer@example.com" />
+        </label>
+        <label class="inline-check invoice-requested-check">
+          <input type="checkbox" data-invoice-requested ${order.invoice_requested ? "checked" : ""} />
+          Receipt requested
+        </label>
         <label class="inline-check archive-check">
           <input type="checkbox" data-archived ${order.archived ? "checked" : ""} />
           Archived
@@ -250,10 +258,20 @@ function invoiceStatusLabel(order) {
   return order.invoice_sent ? "Requested and sent" : "Requested";
 }
 
+function escapeAttribute(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
 async function saveOrderStatus(event) {
   const card = event.currentTarget.closest("[data-order-id]");
   const message = card.querySelector("[data-order-message]");
   const button = event.currentTarget;
+  const invoiceSent = card.querySelector("[data-invoice-sent]").checked;
+  const invoiceRequested = card.querySelector("[data-invoice-requested]").checked || invoiceSent;
 
   button.disabled = true;
   setMessage(message, "Saving...");
@@ -263,7 +281,9 @@ async function saveOrderStatus(event) {
     p_payment_status: card.querySelector("[data-payment-status]").value,
     p_fulfillment_status: card.querySelector("[data-fulfillment-status]").value,
     p_archived: card.querySelector("[data-archived]").checked,
-    p_invoice_sent: card.querySelector("[data-invoice-sent]").checked
+    p_invoice_requested: invoiceRequested,
+    p_invoice_sent: invoiceSent,
+    p_customer_email: card.querySelector("[data-customer-email]").value.trim()
   });
 
   button.disabled = false;

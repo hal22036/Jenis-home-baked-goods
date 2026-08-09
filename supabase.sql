@@ -240,6 +240,7 @@ drop function if exists public.update_order_payment_method(text,text);
 drop function if exists public.admin_list_orders(boolean);
 drop function if exists public.admin_update_order_status(uuid,text,text,boolean);
 drop function if exists public.admin_update_order_status(uuid,text,text,boolean,boolean);
+drop function if exists public.admin_update_order_status(uuid,text,text,boolean,boolean,boolean,text);
 drop function if exists public.admin_list_pickup_dates();
 drop function if exists public.admin_save_pickup_date(uuid,date,integer,boolean);
 drop function if exists public.admin_list_products();
@@ -582,9 +583,19 @@ create or replace function public.admin_update_order_status(
   p_payment_status text,
   p_fulfillment_status text,
   p_archived boolean,
-  p_invoice_sent boolean
+  p_invoice_requested boolean,
+  p_invoice_sent boolean,
+  p_customer_email text
 )
-returns table(order_id uuid, payment_status text, fulfillment_status text, archived boolean, invoice_sent boolean)
+returns table(
+  order_id uuid,
+  payment_status text,
+  fulfillment_status text,
+  archived boolean,
+  invoice_requested boolean,
+  invoice_sent boolean,
+  customer_email text
+)
 language plpgsql
 security definer
 set search_path = public
@@ -602,12 +613,19 @@ begin
     raise exception 'Invalid fulfillment status';
   end if;
 
+  if (coalesce(p_invoice_requested, false) or coalesce(p_invoice_sent, false))
+    and nullif(trim(coalesce(p_customer_email, '')), '') is null then
+    raise exception 'Receipt email is required when a receipt is requested';
+  end if;
+
   update orders
   set
     payment_status = p_payment_status,
     fulfillment_status = p_fulfillment_status,
     archived = p_archived,
-    invoice_sent = p_invoice_sent
+    invoice_requested = coalesce(p_invoice_requested, false) or coalesce(p_invoice_sent, false),
+    invoice_sent = coalesce(p_invoice_sent, false),
+    customer_email = nullif(trim(coalesce(p_customer_email, '')), '')
   where id = p_order_id;
 
   if not found then
@@ -615,7 +633,14 @@ begin
   end if;
 
   return query
-  select o.id, o.payment_status, o.fulfillment_status, o.archived, o.invoice_sent
+  select
+    o.id,
+    o.payment_status,
+    o.fulfillment_status,
+    o.archived,
+    o.invoice_requested,
+    o.invoice_sent,
+    o.customer_email
   from orders o
   where o.id = p_order_id;
 end;
@@ -788,8 +813,8 @@ grant execute on function public.is_admin() to authenticated;
 revoke all on function public.admin_list_orders(boolean) from public;
 grant execute on function public.admin_list_orders(boolean) to authenticated;
 
-revoke all on function public.admin_update_order_status(uuid,text,text,boolean,boolean) from public;
-grant execute on function public.admin_update_order_status(uuid,text,text,boolean,boolean) to authenticated;
+revoke all on function public.admin_update_order_status(uuid,text,text,boolean,boolean,boolean,text) from public;
+grant execute on function public.admin_update_order_status(uuid,text,text,boolean,boolean,boolean,text) to authenticated;
 
 revoke all on function public.admin_list_pickup_dates() from public;
 grant execute on function public.admin_list_pickup_dates() to authenticated;

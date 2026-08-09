@@ -141,6 +141,10 @@
   margin-top: 14px;
 }
 
+.receipt-email-field {
+  grid-column: span 2;
+}
+
 .admin-order-actions {
   display: flex;
   gap: 10px;
@@ -152,6 +156,7 @@
 }
 
 .archive-check,
+.invoice-requested-check,
 .invoice-sent-check,
 .open-check,
 .product-active-check {
@@ -186,6 +191,10 @@
 
   .admin-order-actions {
     display: grid;
+  }
+
+  .receipt-email-field {
+    grid-column: auto;
   }
 
   .compact-button {
