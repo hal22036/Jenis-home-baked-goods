@@ -352,6 +352,9 @@ drop function if exists public.admin_save_pickup_date(uuid,date,integer,boolean)
 drop function if exists public.admin_list_products();
 drop function if exists public.admin_update_product_active(uuid,boolean);
 drop function if exists public.admin_update_product_flags(uuid,boolean,boolean);
+drop function if exists public.admin_list_coupons();
+drop function if exists public.admin_save_coupon(text,text,text,text,integer,integer,integer,date,date,integer,boolean);
+drop function if exists public.admin_remove_coupon(text);
 
 create or replace function public.validate_coupon_code(
   p_coupon_code text,
@@ -1250,6 +1253,216 @@ begin
 end;
 $$;
 
+create or replace function public.admin_list_coupons()
+returns table(
+  code text,
+  description text,
+  discount_type text,
+  percent_off integer,
+  amount_off_cents integer,
+  minimum_subtotal_cents integer,
+  starts_on date,
+  ends_on date,
+  max_uses integer,
+  active boolean,
+  used_count integer,
+  created_at timestamptz
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Admin access required';
+  end if;
+
+  return query
+  select
+    c.code,
+    c.description,
+    c.discount_type,
+    c.percent_off,
+    c.amount_off_cents,
+    c.minimum_subtotal_cents,
+    c.starts_on,
+    c.ends_on,
+    c.max_uses,
+    c.active,
+    count(o.id)::integer as used_count,
+    c.created_at
+  from public.coupons c
+  left join public.orders o on o.coupon_code = c.code
+    and o.fulfillment_status <> 'canceled'
+  group by c.code
+  order by c.active desc, c.created_at desc, c.code asc;
+end;
+$$;
+
+create or replace function public.admin_save_coupon(
+  p_original_code text,
+  p_code text,
+  p_description text,
+  p_discount_type text,
+  p_percent_off integer,
+  p_amount_off_cents integer,
+  p_minimum_subtotal_cents integer,
+  p_starts_on date,
+  p_ends_on date,
+  p_max_uses integer,
+  p_active boolean
+)
+returns table(saved_code text)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_original_code text;
+  v_code text;
+  v_discount_type text;
+  v_used_count integer;
+begin
+  if not public.is_admin() then
+    raise exception 'Admin access required';
+  end if;
+
+  v_original_code := nullif(upper(trim(coalesce(p_original_code, ''))), '');
+  v_code := upper(trim(coalesce(p_code, '')));
+  v_discount_type := lower(trim(coalesce(p_discount_type, '')));
+
+  if v_code = '' then
+    raise exception 'Coupon code is required';
+  end if;
+
+  if v_code !~ '^[A-Z0-9_-]+$' then
+    raise exception 'Coupon code can only use letters, numbers, underscores, and dashes';
+  end if;
+
+  if v_discount_type not in ('percent', 'amount') then
+    raise exception 'Discount type must be percent or amount';
+  end if;
+
+  if v_discount_type = 'percent' and coalesce(p_percent_off, 0) not between 1 and 100 then
+    raise exception 'Percent coupons need a percent from 1 to 100';
+  end if;
+
+  if v_discount_type = 'amount' and coalesce(p_amount_off_cents, 0) <= 0 then
+    raise exception 'Dollar amount coupons need an amount greater than zero';
+  end if;
+
+  if p_starts_on is not null and p_ends_on is not null and p_starts_on > p_ends_on then
+    raise exception 'Start date must be before end date';
+  end if;
+
+  if p_max_uses is not null and p_max_uses <= 0 then
+    raise exception 'Max uses must be blank or greater than zero';
+  end if;
+
+  if v_original_code is not null and v_original_code <> v_code then
+    select count(*)::integer
+    into v_used_count
+    from public.orders
+    where coupon_code = v_original_code;
+
+    if v_used_count > 0 then
+      raise exception 'Coupon code cannot be renamed after it has been used';
+    end if;
+
+    delete from public.coupons
+    where code = v_original_code;
+  end if;
+
+  insert into public.coupons (
+    code,
+    description,
+    discount_type,
+    percent_off,
+    amount_off_cents,
+    minimum_subtotal_cents,
+    starts_on,
+    ends_on,
+    max_uses,
+    active
+  )
+  values (
+    v_code,
+    nullif(trim(coalesce(p_description, '')), ''),
+    v_discount_type,
+    case when v_discount_type = 'percent' then p_percent_off else null end,
+    case when v_discount_type = 'amount' then p_amount_off_cents else null end,
+    greatest(coalesce(p_minimum_subtotal_cents, 0), 0),
+    p_starts_on,
+    p_ends_on,
+    p_max_uses,
+    coalesce(p_active, true)
+  )
+  on conflict (code)
+  do update set
+    description = excluded.description,
+    discount_type = excluded.discount_type,
+    percent_off = excluded.percent_off,
+    amount_off_cents = excluded.amount_off_cents,
+    minimum_subtotal_cents = excluded.minimum_subtotal_cents,
+    starts_on = excluded.starts_on,
+    ends_on = excluded.ends_on,
+    max_uses = excluded.max_uses,
+    active = excluded.active;
+
+  return query select v_code;
+end;
+$$;
+
+create or replace function public.admin_remove_coupon(
+  p_code text
+)
+returns table(code text, removed boolean, active boolean)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_code text;
+  v_used_count integer;
+begin
+  if not public.is_admin() then
+    raise exception 'Admin access required';
+  end if;
+
+  v_code := upper(trim(coalesce(p_code, '')));
+
+  if v_code = '' then
+    raise exception 'Coupon code is required';
+  end if;
+
+  select count(*)::integer
+  into v_used_count
+  from public.orders
+  where coupon_code = v_code;
+
+  if v_used_count > 0 then
+    update public.coupons
+    set active = false
+    where coupons.code = v_code;
+
+    if not found then
+      raise exception 'Coupon not found';
+    end if;
+
+    return query select v_code, false, false;
+  end if;
+
+  delete from public.coupons
+  where coupons.code = v_code;
+
+  if not found then
+    raise exception 'Coupon not found';
+  end if;
+
+  return query select v_code, true, false;
+end;
+$$;
+
 revoke all on function public.place_order(uuid,text,text,text,text,text,boolean,text,text,text,jsonb) from public;
 grant execute on function public.place_order(uuid,text,text,text,text,text,boolean,text,text,text,jsonb) to anon, authenticated;
 
@@ -1291,6 +1504,15 @@ grant execute on function public.admin_list_products() to authenticated;
 
 revoke all on function public.admin_update_product_flags(uuid,boolean,boolean) from public;
 grant execute on function public.admin_update_product_flags(uuid,boolean,boolean) to authenticated;
+
+revoke all on function public.admin_list_coupons() from public;
+grant execute on function public.admin_list_coupons() to authenticated;
+
+revoke all on function public.admin_save_coupon(text,text,text,text,integer,integer,integer,date,date,integer,boolean) from public;
+grant execute on function public.admin_save_coupon(text,text,text,text,integer,integer,integer,date,date,integer,boolean) to authenticated;
+
+revoke all on function public.admin_remove_coupon(text) from public;
+grant execute on function public.admin_remove_coupon(text) to authenticated;
 
 grant select on public.products to anon, authenticated;
 grant select on public.pickup_dates to anon, authenticated;

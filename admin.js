@@ -6,7 +6,8 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const state = {
   orders: [],
   pickupDates: [],
-  products: []
+  products: [],
+  coupons: []
 };
 
 const el = {
@@ -14,27 +15,46 @@ const el = {
   adminPanel: document.querySelector("#admin-panel"),
   datesPanel: document.querySelector("#dates-panel"),
   productsPanel: document.querySelector("#products-panel"),
+  couponsPanel: document.querySelector("#coupons-panel"),
   loginForm: document.querySelector("#admin-login-form"),
   loginMessage: document.querySelector("#login-message"),
   adminMessage: document.querySelector("#admin-message"),
   dateAdminMessage: document.querySelector("#date-admin-message"),
   productAdminMessage: document.querySelector("#product-admin-message"),
+  couponAdminMessage: document.querySelector("#coupon-admin-message"),
   ordersList: document.querySelector("#orders-list"),
   pickupDatesList: document.querySelector("#pickup-dates-list"),
   productsList: document.querySelector("#products-list"),
+  couponsList: document.querySelector("#coupons-list"),
   includeArchived: document.querySelector("#include-archived"),
   orderPickupFilter: document.querySelector("#order-pickup-filter"),
   orderInvoiceFilter: document.querySelector("#order-invoice-filter"),
   clearOrderFilters: document.querySelector("#clear-order-filters"),
   refreshOrders: document.querySelector("#refresh-orders"),
   refreshProducts: document.querySelector("#refresh-products"),
+  refreshCoupons: document.querySelector("#refresh-coupons"),
   signOut: document.querySelector("#admin-sign-out"),
   pickupDateForm: document.querySelector("#pickup-date-form"),
   pickupDateId: document.querySelector("#pickup-date-id"),
   pickupDateInput: document.querySelector("#pickup-date-input"),
   pickupCapacityInput: document.querySelector("#pickup-capacity-input"),
   pickupOpenInput: document.querySelector("#pickup-open-input"),
-  clearDateForm: document.querySelector("#clear-date-form")
+  clearDateForm: document.querySelector("#clear-date-form"),
+  couponForm: document.querySelector("#coupon-form"),
+  couponOriginalCode: document.querySelector("#coupon-original-code"),
+  couponCodeInput: document.querySelector("#coupon-code-input"),
+  couponDescriptionInput: document.querySelector("#coupon-description-input"),
+  couponTypeInput: document.querySelector("#coupon-type-input"),
+  couponPercentField: document.querySelector("#coupon-percent-field"),
+  couponPercentInput: document.querySelector("#coupon-percent-input"),
+  couponAmountField: document.querySelector("#coupon-amount-field"),
+  couponAmountInput: document.querySelector("#coupon-amount-input"),
+  couponMinimumInput: document.querySelector("#coupon-minimum-input"),
+  couponStartInput: document.querySelector("#coupon-start-input"),
+  couponEndInput: document.querySelector("#coupon-end-input"),
+  couponMaxUsesInput: document.querySelector("#coupon-max-uses-input"),
+  couponActiveInput: document.querySelector("#coupon-active-input"),
+  clearCouponForm: document.querySelector("#clear-coupon-form")
 };
 
 function money(cents) {
@@ -84,6 +104,7 @@ function showLogin() {
   el.adminPanel.hidden = true;
   el.datesPanel.hidden = true;
   el.productsPanel.hidden = true;
+  el.couponsPanel.hidden = true;
 }
 
 async function showAdmin() {
@@ -91,7 +112,8 @@ async function showAdmin() {
   el.adminPanel.hidden = false;
   el.datesPanel.hidden = false;
   el.productsPanel.hidden = false;
-  await Promise.all([loadOrders(), loadPickupDates(), loadProducts()]);
+  el.couponsPanel.hidden = false;
+  await Promise.all([loadOrders(), loadPickupDates(), loadProducts(), loadCoupons()]);
 }
 
 el.loginForm.addEventListener("submit", async event => {
@@ -124,6 +146,9 @@ el.refreshOrders.addEventListener("click", () => {
 });
 
 el.refreshProducts.addEventListener("click", loadProducts);
+el.refreshCoupons.addEventListener("click", loadCoupons);
+el.couponTypeInput.addEventListener("change", syncCouponTypeFields);
+el.clearCouponForm.addEventListener("click", clearCouponForm);
 
 el.includeArchived.addEventListener("change", loadOrders);
 el.orderPickupFilter.addEventListener("change", renderOrders);
@@ -487,6 +512,178 @@ async function saveProductFlags(event) {
   row.classList.toggle("is-inactive", !row.querySelector("[data-product-active]").checked);
   setMessage(el.productAdminMessage, "Product settings saved.", "success");
   await loadProducts();
+}
+
+function dollarsToCents(value) {
+  return Math.round(Number(value || 0) * 100);
+}
+
+function centsToDollars(cents) {
+  return (Number(cents || 0) / 100).toFixed(2);
+}
+
+function discountLabel(coupon) {
+  if (coupon.discount_type === "percent") return `${coupon.percent_off}% off`;
+  return `${money(coupon.amount_off_cents)} off`;
+}
+
+function couponDateRange(coupon) {
+  if (!coupon.starts_on && !coupon.ends_on) return "No date limit";
+  if (coupon.starts_on && coupon.ends_on) return `${prettyDate(coupon.starts_on)} - ${prettyDate(coupon.ends_on)}`;
+  if (coupon.starts_on) return `Starts ${prettyDate(coupon.starts_on)}`;
+  return `Ends ${prettyDate(coupon.ends_on)}`;
+}
+
+function syncCouponTypeFields() {
+  const isPercent = el.couponTypeInput.value === "percent";
+
+  el.couponPercentField.hidden = !isPercent;
+  el.couponPercentInput.required = isPercent;
+  el.couponAmountField.hidden = isPercent;
+  el.couponAmountInput.required = !isPercent;
+}
+
+async function loadCoupons() {
+  setMessage(el.couponAdminMessage, "Loading coupons...");
+
+  const { data, error } = await supabaseClient.rpc("admin_list_coupons");
+
+  if (error) {
+    setMessage(el.couponAdminMessage, error.message, "error");
+    return;
+  }
+
+  state.coupons = data || [];
+  renderCoupons();
+  setMessage(el.couponAdminMessage, `${state.coupons.length} coupon${state.coupons.length === 1 ? "" : "s"} shown.`, "success");
+}
+
+function renderCoupons() {
+  if (!state.coupons.length) {
+    el.couponsList.innerHTML = "<p class=\"muted\">No coupons yet.</p>";
+    return;
+  }
+
+  el.couponsList.innerHTML = state.coupons.map(coupon => `
+    <article class="coupon-row ${coupon.active ? "" : "is-inactive"}" data-coupon-code="${escapeAttribute(coupon.code)}">
+      <div>
+        <div class="coupon-heading">
+          <strong>${coupon.code}</strong>
+          <span>${coupon.active ? "Active" : "Inactive"}</span>
+        </div>
+        <p>${coupon.description || "No description"}</p>
+        <p>
+          ${discountLabel(coupon)}
+          - Minimum ${money(coupon.minimum_subtotal_cents)}
+          - ${coupon.used_count || 0}${coupon.max_uses ? ` of ${coupon.max_uses}` : ""} used
+          - ${couponDateRange(coupon)}
+        </p>
+      </div>
+      <div class="coupon-row-actions">
+        <button class="secondary-button compact-button" type="button" data-edit-coupon>Edit</button>
+        <button class="secondary-button compact-button danger-button" type="button" data-remove-coupon>
+          ${coupon.used_count ? "Deactivate" : "Remove"}
+        </button>
+      </div>
+    </article>
+  `).join("");
+
+  el.couponsList.querySelectorAll("[data-edit-coupon]").forEach(button => {
+    button.addEventListener("click", editCoupon);
+  });
+
+  el.couponsList.querySelectorAll("[data-remove-coupon]").forEach(button => {
+    button.addEventListener("click", removeCoupon);
+  });
+}
+
+function editCoupon(event) {
+  const row = event.currentTarget.closest("[data-coupon-code]");
+  const coupon = state.coupons.find(item => item.code === row.dataset.couponCode);
+
+  el.couponOriginalCode.value = coupon.code;
+  el.couponCodeInput.value = coupon.code;
+  el.couponDescriptionInput.value = coupon.description || "";
+  el.couponTypeInput.value = coupon.discount_type;
+  el.couponPercentInput.value = coupon.percent_off || "";
+  el.couponAmountInput.value = coupon.amount_off_cents ? centsToDollars(coupon.amount_off_cents) : "";
+  el.couponMinimumInput.value = centsToDollars(coupon.minimum_subtotal_cents);
+  el.couponStartInput.value = coupon.starts_on || "";
+  el.couponEndInput.value = coupon.ends_on || "";
+  el.couponMaxUsesInput.value = coupon.max_uses || "";
+  el.couponActiveInput.checked = coupon.active;
+  syncCouponTypeFields();
+  el.couponCodeInput.focus();
+}
+
+function clearCouponForm() {
+  el.couponOriginalCode.value = "";
+  el.couponCodeInput.value = "";
+  el.couponDescriptionInput.value = "";
+  el.couponTypeInput.value = "percent";
+  el.couponPercentInput.value = "10";
+  el.couponAmountInput.value = "";
+  el.couponMinimumInput.value = "0.00";
+  el.couponStartInput.value = "";
+  el.couponEndInput.value = "";
+  el.couponMaxUsesInput.value = "";
+  el.couponActiveInput.checked = true;
+  syncCouponTypeFields();
+  setMessage(el.couponAdminMessage);
+}
+
+el.couponForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  setMessage(el.couponAdminMessage, "Saving coupon...");
+
+  const isPercent = el.couponTypeInput.value === "percent";
+  const { error } = await supabaseClient.rpc("admin_save_coupon", {
+    p_original_code: el.couponOriginalCode.value || null,
+    p_code: el.couponCodeInput.value,
+    p_description: el.couponDescriptionInput.value,
+    p_discount_type: el.couponTypeInput.value,
+    p_percent_off: isPercent ? Number(el.couponPercentInput.value) : null,
+    p_amount_off_cents: isPercent ? null : dollarsToCents(el.couponAmountInput.value),
+    p_minimum_subtotal_cents: dollarsToCents(el.couponMinimumInput.value),
+    p_starts_on: el.couponStartInput.value || null,
+    p_ends_on: el.couponEndInput.value || null,
+    p_max_uses: el.couponMaxUsesInput.value ? Number(el.couponMaxUsesInput.value) : null,
+    p_active: el.couponActiveInput.checked
+  });
+
+  if (error) {
+    setMessage(el.couponAdminMessage, error.message, "error");
+    return;
+  }
+
+  setMessage(el.couponAdminMessage, "Coupon saved.", "success");
+  clearCouponForm();
+  await loadCoupons();
+});
+
+async function removeCoupon(event) {
+  const row = event.currentTarget.closest("[data-coupon-code]");
+  const code = row.dataset.couponCode;
+
+  setMessage(el.couponAdminMessage, "Updating coupon...");
+
+  const { data, error } = await supabaseClient.rpc("admin_remove_coupon", {
+    p_code: code
+  });
+
+  if (error) {
+    setMessage(el.couponAdminMessage, error.message, "error");
+    return;
+  }
+
+  const result = Array.isArray(data) ? data[0] : data;
+  setMessage(
+    el.couponAdminMessage,
+    result?.removed ? "Coupon removed." : "Coupon has been used before, so it was deactivated instead.",
+    "success"
+  );
+  clearCouponForm();
+  await loadCoupons();
 }
 
 function renderPickupDates() {

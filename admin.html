@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bakery Admin | Jeni's Home Baked Goods</title>
-  <link rel="stylesheet" href="styles.css?v=20260810-shipping-tax" />
-  <link rel="stylesheet" href="admin.css?v=20260810-shipping-tax" />
+  <link rel="stylesheet" href="styles.css?v=20260810-admin-coupons" />
+  <link rel="stylesheet" href="admin.css?v=20260810-admin-coupons" />
 </head>
 <body>
   <header class="site-header admin-header">
@@ -84,6 +84,68 @@
       <div id="products-list" class="products-list"></div>
     </section>
 
+    <section class="panel" id="coupons-panel" hidden>
+      <div class="admin-toolbar">
+        <div>
+          <p class="step">Coupons</p>
+          <h2>Manage coupon codes</h2>
+        </div>
+        <button class="secondary-button compact-button" type="button" id="refresh-coupons">Refresh coupons</button>
+      </div>
+
+      <form id="coupon-form" class="coupon-admin-form">
+        <input id="coupon-original-code" type="hidden" />
+        <label>
+          Code
+          <input id="coupon-code-input" autocomplete="off" placeholder="WELCOME10" required />
+        </label>
+        <label>
+          Description
+          <input id="coupon-description-input" placeholder="10% off opening week" />
+        </label>
+        <label>
+          Discount type
+          <select id="coupon-type-input" required>
+            <option value="percent">Percent off</option>
+            <option value="amount">Dollar amount off</option>
+          </select>
+        </label>
+        <label id="coupon-percent-field">
+          Percent off
+          <input id="coupon-percent-input" type="number" min="1" max="100" value="10" />
+        </label>
+        <label id="coupon-amount-field" hidden>
+          Amount off
+          <input id="coupon-amount-input" type="number" min="0.01" step="0.01" placeholder="5.00" />
+        </label>
+        <label>
+          Minimum order
+          <input id="coupon-minimum-input" type="number" min="0" step="0.01" value="0.00" />
+        </label>
+        <label>
+          Start date
+          <input id="coupon-start-input" type="date" />
+        </label>
+        <label>
+          End date
+          <input id="coupon-end-input" type="date" />
+        </label>
+        <label>
+          Max uses
+          <input id="coupon-max-uses-input" type="number" min="1" placeholder="Blank for unlimited" />
+        </label>
+        <label class="inline-check coupon-active-check">
+          <input id="coupon-active-input" type="checkbox" checked />
+          Active
+        </label>
+        <button type="submit">Save coupon</button>
+        <button class="secondary-button" type="button" id="clear-coupon-form">Clear form</button>
+      </form>
+
+      <p id="coupon-admin-message" class="message" role="status"></p>
+      <div id="coupons-list" class="coupons-list"></div>
+    </section>
+
     <section class="panel" id="dates-panel" hidden>
       <div class="admin-toolbar">
         <div>
@@ -116,6 +178,6 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="admin.js?v=20260810-shipping-tax"></script>
+  <script src="admin.js?v=20260810-admin-coupons"></script>
 </body>
 </html>

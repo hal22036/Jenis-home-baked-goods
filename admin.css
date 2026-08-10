@@ -81,14 +81,16 @@
 .orders-list,
 .pickup-dates-list,
 .products-list,
-.admin-products {
+.admin-products,
+.coupons-list {
   display: grid;
   gap: 14px;
 }
 
 .admin-order,
 .pickup-date-row,
-.admin-product-row {
+.admin-product-row,
+.coupon-row {
   padding: 16px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -96,7 +98,8 @@
 }
 
 .admin-order.is-archived,
-.admin-product-row.is-inactive {
+.admin-product-row.is-inactive,
+.coupon-row.is-inactive {
   opacity: 0.72;
 }
 
@@ -113,6 +116,7 @@
 .order-heading,
 .pickup-date-row,
 .admin-product-row,
+.coupon-row,
 .admin-items div {
   display: flex;
   align-items: flex-start;
@@ -174,12 +178,68 @@
 }
 
 .status-grid,
-.date-admin-form {
+.date-admin-form,
+.coupon-admin-form {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   align-items: end;
   gap: 12px;
   margin-top: 14px;
+}
+
+.coupon-admin-form {
+  margin: 16px 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.coupon-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.coupon-heading strong {
+  color: var(--accent-dark);
+  font-size: 1.12rem;
+}
+
+.coupon-heading span {
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: #e3f2e8;
+  color: var(--success);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.coupon-row.is-inactive .coupon-heading span {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
+.coupon-row p {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.coupon-row-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 10px;
+}
+
+.danger-button {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.danger-button:hover {
+  background: var(--danger);
+  color: #fff;
 }
 
 .receipt-email-field {
@@ -219,6 +279,7 @@
   .admin-toolbar,
   .pickup-date-row,
   .admin-product-row,
+  .coupon-row,
   .order-heading,
   .admin-items div {
     display: grid;
@@ -226,11 +287,13 @@
 
   .toolbar-actions,
   .compact-button,
-  .admin-order-actions {
+  .admin-order-actions,
+  .coupon-row-actions {
     width: 100%;
   }
 
-  .admin-order-actions {
+  .admin-order-actions,
+  .coupon-row-actions {
     display: grid;
   }
 
