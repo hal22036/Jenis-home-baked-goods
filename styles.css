@@ -419,6 +419,54 @@ legend {
   font-weight: 800;
 }
 
+.fulfillment-options {
+  padding: 16px;
+  background: var(--surface-soft);
+}
+
+.fulfillment-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.fulfillment-card {
+  min-height: 132px;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  margin: 0;
+  padding: 16px;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  background: #fffdf9;
+  cursor: pointer;
+}
+
+.fulfillment-card:has(input:checked) {
+  border-color: var(--success);
+  background: #eef7f1;
+  box-shadow: 0 0 0 3px rgba(46, 104, 71, 0.12);
+}
+
+.fulfillment-card input {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--success);
+}
+
+.fulfillment-title {
+  color: var(--accent-dark);
+  font-size: 1.16rem;
+  font-weight: 900;
+}
+
+.fulfillment-copy {
+  color: var(--muted);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
 .payment-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -830,6 +878,10 @@ button[type="submit"]:disabled {
   }
 
   .payment-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fulfillment-grid {
     grid-template-columns: 1fr;
   }
 

@@ -9,7 +9,7 @@
   />
   <title>Bakery Bread Orders</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
-  <link rel="stylesheet" href="styles.css?v=20260808-home-made" />
+  <link rel="stylesheet" href="styles.css?v=20260810-checkout-cards" />
 </head>
 <body>
   <header class="site-header">
@@ -91,16 +91,22 @@
           ></textarea>
         </label>
 
-        <fieldset>
-          <legend>How would you like to get your order?</legend>
-          <div class="payment-grid">
-            <label class="radio">
+        <fieldset class="fulfillment-options">
+          <legend>Checkout option</legend>
+          <div class="fulfillment-grid">
+            <label class="fulfillment-card">
               <input type="radio" name="fulfillment" value="pickup" checked />
-              <span>Pickup</span>
+              <span class="fulfillment-title">Pickup</span>
+              <span class="fulfillment-copy">
+                Pick up your order on the Friday date you selected between 4-7 pm.
+              </span>
             </label>
-            <label class="radio">
+            <label class="fulfillment-card">
               <input type="radio" name="fulfillment" value="shipping" />
-              <span>Ship it</span>
+              <span class="fulfillment-title">Shipping</span>
+              <span class="fulfillment-copy">
+                Ship eligible items. Items marked pickup only cannot be shipped.
+              </span>
             </label>
           </div>
           <p id="shipping-message" class="hint" role="status"></p>
@@ -174,6 +180,6 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20260810-shipping-tax"></script>
+  <script src="app.js?v=20260810-checkout-cards"></script>
 </body>
 </html>
