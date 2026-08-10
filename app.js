@@ -67,6 +67,7 @@ const state = {
   selectedDate: null,
   quantities: {},
   coupon: null,
+  orderTotals: null,
   lastOrder: null,
   isSubmitting: false
 };
@@ -86,6 +87,9 @@ const el = {
   form: document.querySelector("#order-form"),
   formMessage: document.querySelector("#form-message"),
   customerPhone: document.querySelector("#customer-phone"),
+  shippingAddressField: document.querySelector("#shipping-address-field"),
+  shippingAddress: document.querySelector("#shipping-address"),
+  shippingMessage: document.querySelector("#shipping-message"),
   couponCode: document.querySelector("#coupon-code"),
   couponMessage: document.querySelector("#coupon-message"),
   applyCoupon: document.querySelector("#apply-coupon"),
@@ -223,6 +227,11 @@ function discountCents() {
 }
 
 function finalTotalCents() {
+  if (state.orderTotals) return state.orderTotals.final_total_cents;
+  return Math.max(selectedTotalCents() - discountCents(), 0);
+}
+
+function discountedSubtotalCents() {
   return Math.max(selectedTotalCents() - discountCents(), 0);
 }
 
@@ -263,6 +272,15 @@ function escapeAttribute(value) {
     .replace(/"/g, "&quot;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+function escapeHtml(value) {
+  return cleanText(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 function explicitGroupFor(product) {
@@ -406,8 +424,61 @@ function setCouponMessage(message = "", type = "") {
 
 function resetCoupon(message = "") {
   state.coupon = null;
+  state.orderTotals = null;
   el.removeCoupon.hidden = true;
   if (message) setCouponMessage(message, "error");
+}
+
+function fulfillmentMethod() {
+  return document.querySelector('input[name="fulfillment"]:checked')?.value || "pickup";
+}
+
+function selectedNonShippableItems() {
+  return state.products.filter(product =>
+    (state.quantities[product.id] || 0) > 0 && !product.shippable
+  );
+}
+
+function shippingIsSelected() {
+  return fulfillmentMethod() === "shipping";
+}
+
+function fulfillmentLabel(value = fulfillmentMethod()) {
+  return value === "shipping" ? "Shipping" : "Pickup";
+}
+
+function updateShippingFields() {
+  const isShipping = shippingIsSelected();
+  const nonShippableItems = selectedNonShippableItems();
+
+  el.shippingAddressField.hidden = !isShipping;
+  el.shippingAddress.required = isShipping;
+
+  if (!isShipping) {
+    el.shippingAddress.value = "";
+    el.shippingMessage.textContent = "Pickup orders are available on your selected Friday.";
+  } else if (nonShippableItems.length) {
+    el.shippingMessage.textContent =
+      `Shipping is not available because this order includes: ${nonShippableItems.map(product => displayNameFor(product)).join(", ")}.`;
+  } else {
+    el.shippingMessage.textContent = "Only items marked shippable by Jeni can be mailed.";
+  }
+
+  state.orderTotals = null;
+  updateSummary();
+}
+
+async function calculateOrderTotals() {
+  const { data, error } = await supabaseClient.rpc("calculate_order_totals", {
+    p_discounted_subtotal_cents: discountedSubtotalCents(),
+    p_shipping_method: fulfillmentMethod()
+  });
+
+  if (error) throw error;
+
+  const totals = Array.isArray(data) ? data[0] : data;
+  state.orderTotals = totals;
+  return totals;
 }
 
 async function applyCouponCode() {
@@ -446,6 +517,7 @@ async function applyCouponCode() {
 
   const coupon = Array.isArray(data) ? data[0] : data;
   state.coupon = coupon;
+  state.orderTotals = null;
   el.couponCode.value = coupon.code;
   el.removeCoupon.hidden = false;
   setCouponMessage(`Coupon applied: ${money(coupon.discount_cents)} off.`, "success");
@@ -538,8 +610,10 @@ function renderDates() {
 function selectDate(dateId) {
   state.selectedDate = state.dates.find(d => d.id === dateId);
   state.quantities = {};
+  state.orderTotals = null;
   resetCoupon();
   el.couponCode.value = "";
+  updateShippingFields();
 
   el.dateSection.hidden = false;
   el.intro.hidden = false;
@@ -627,6 +701,9 @@ function renderProductCard(products) {
       ${productImageMarkup([primaryProduct], primaryProduct.name)}
       <div>
         <h3>${primaryProduct.name}</h3>
+        <span class="shipping-badge ${primaryProduct.shippable ? "can-ship" : "pickup-only"}">
+          ${primaryProduct.shippable ? "Can ship" : "Pickup only"}
+        </span>
         <p>${primaryProduct.description || ""}</p>
       </div>
       <div class="product-bottom">
@@ -647,6 +724,9 @@ function renderProductCard(products) {
       <div class="option-card-heading">
         <div>
           <h3>${groupName || primaryProduct.name}</h3>
+          <span class="shipping-badge ${sortedProducts.every(product => product.shippable) ? "can-ship" : "pickup-only"}">
+            ${sortedProducts.every(product => product.shippable) ? "Can ship" : "Some options pickup only"}
+          </span>
           <p>${primaryProduct.description || ""}</p>
         </div>
         <div class="group-subtotal">
@@ -702,6 +782,8 @@ function isQuantityButtonDisabled(action, product) {
 }
 
 function updateProductQuantity(action, product) {
+  state.orderTotals = null;
+
   if (state.coupon) {
     resetCoupon("Coupon removed because the order changed. Apply it again before checkout.");
   }
@@ -731,6 +813,7 @@ function updateProductQuantity(action, product) {
 
   updateSummary();
   renderProducts();
+  updateShippingFields();
 }
 
 function updateSummary() {
@@ -744,12 +827,15 @@ function updateSummary() {
 
   el.selectedCount.textContent = count;
   el.orderTotal.textContent = state.coupon
-    ? `${money(finalTotalCents())} after coupon`
+    ? `${money(discountedSubtotalCents())} after coupon`
     : money(selectedTotalCents());
 }
 
 el.customerPhone.addEventListener("input", syncPhoneFormat);
 el.customerPhone.addEventListener("blur", syncPhoneFormat);
+document.querySelectorAll('input[name="fulfillment"]').forEach(input => {
+  input.addEventListener("change", updateShippingFields);
+});
 el.applyCoupon.addEventListener("click", applyCouponCode);
 el.removeCoupon.addEventListener("click", () => {
   resetCoupon();
@@ -771,7 +857,7 @@ el.form.addEventListener("submit", async event => {
   }
 
   if (totalQty < 1) {
-    setMessage("Please add at least one loaf.", "error");
+    setMessage("Please add at least one item.", "error");
     return;
   }
 
@@ -790,13 +876,36 @@ el.form.addEventListener("submit", async event => {
     return;
   }
 
+  if (shippingIsSelected()) {
+    const nonShippableItems = selectedNonShippableItems();
+
+    if (nonShippableItems.length) {
+      setMessage(
+        `Shipping is not available for: ${nonShippableItems.map(product => displayNameFor(product)).join(", ")}.`,
+        "error"
+      );
+      return;
+    }
+
+    if (!cleanText(el.shippingAddress.value)) {
+      setMessage("Please enter a shipping address.", "error");
+      el.shippingAddress.focus();
+      return;
+    }
+  }
+
   const typedCoupon = cleanText(el.couponCode.value).toUpperCase();
   if (typedCoupon && state.coupon?.code !== typedCoupon) {
     const applied = await applyCouponCode();
     if (!applied) return;
   }
 
-  showReview();
+  try {
+    await showReview();
+  } catch (error) {
+    console.error(error);
+    setMessage(error.message || "Could not calculate your order total. Please try again.", "error");
+  }
 });
 
 function selectedItemsWithDetails() {
@@ -808,7 +917,8 @@ function selectedItemsWithDetails() {
       quantity: state.quantities[product.id],
       price_cents: product.price_cents,
       capacity_units: capacityUnitsFor(product),
-      image_url: cleanText(product.image_url)
+      image_url: cleanText(product.image_url),
+      shippable: Boolean(product.shippable)
     }))
     .sort((a, b) => compareText(a.name, b.name));
 }
@@ -819,7 +929,9 @@ function customerDetails() {
     email: el.invoiceEmail.value.trim(),
     phone: formatPhone(el.customerPhone.value),
     notes: document.querySelector("#customer-notes").value.trim(),
-    paymentMethod: document.querySelector('input[name="payment"]:checked')?.value
+    paymentMethod: document.querySelector('input[name="payment"]:checked')?.value,
+    fulfillmentMethod: fulfillmentMethod(),
+    shippingAddress: cleanText(el.shippingAddress.value)
   };
 }
 
@@ -837,7 +949,7 @@ function updateInvoiceEmailField() {
   }
 }
 
-function showReview() {
+async function showReview() {
   const details = customerDetails();
 
   if (!hasValidPaymentMethod(details.paymentMethod)) {
@@ -847,6 +959,7 @@ function showReview() {
 
   const payment = STORE_SETTINGS.paymentOptions[details.paymentMethod];
   const items = selectedItemsWithDetails();
+  const totals = await calculateOrderTotals();
 
   el.intro.hidden = true;
   el.dateSection.hidden = true;
@@ -858,12 +971,16 @@ function showReview() {
 
   el.reviewContent.innerHTML = `
     <dl class="receipt invoice-receipt">
-      <div><dt>Pickup</dt><dd>${prettyDate(state.selectedDate.pickup_date)}</dd></div>
-      <div><dt>Name</dt><dd>${details.name}</dd></div>
+      <div><dt>${details.fulfillmentMethod === "shipping" ? "Ship date" : "Pickup"}</dt><dd>${prettyDate(state.selectedDate.pickup_date)}</dd></div>
+      <div><dt>Name</dt><dd>${escapeHtml(details.name)}</dd></div>
       <div><dt>Phone</dt><dd>${details.phone}</dd></div>
       <div><dt>Payment</dt><dd>${payment.label}</dd></div>
+      <div><dt>Method</dt><dd>${fulfillmentLabel(details.fulfillmentMethod)}</dd></div>
       <div><dt>Loaf spots</dt><dd>${selectedCapacityUnits()}</dd></div>
     </dl>
+    ${details.fulfillmentMethod === "shipping" ? `
+      <p class="admin-notes"><strong>Shipping address:</strong> ${escapeHtml(details.shippingAddress)}</p>
+    ` : ""}
     <div class="invoice-items">
       ${items.map(item => `
         <div>
@@ -875,7 +992,7 @@ function showReview() {
         </div>
       `).join("")}
     </div>
-    ${details.notes ? `<p class="admin-notes"><strong>Questions/comments:</strong> ${details.notes}</p>` : ""}
+    ${details.notes ? `<p class="admin-notes"><strong>Questions/comments:</strong> ${escapeHtml(details.notes)}</p>` : ""}
     <div class="summary">
       <div class="total-lines">
         <div><span>Subtotal</span><span>${money(selectedTotalCents())}</span></div>
@@ -884,6 +1001,10 @@ function showReview() {
             <span>Coupon ${state.coupon.code}</span>
             <span>-${money(discountCents())}</span>
           </div>
+        ` : ""}
+        <div><span>Tax</span><span>${money(totals.tax_cents)}</span></div>
+        ${totals.shipping_cents ? `
+          <div><span>Shipping</span><span>${money(totals.shipping_cents)}</span></div>
         ` : ""}
         <div><strong>Total</strong><strong>${money(finalTotalCents())}</strong></div>
       </div>
@@ -941,6 +1062,15 @@ async function submitReviewedOrder() {
   el.confirmOrder.disabled = true;
   setReviewMessage("Submitting your order...", "");
 
+  try {
+    await calculateOrderTotals();
+  } catch (error) {
+    state.isSubmitting = false;
+    el.confirmOrder.disabled = false;
+    setReviewMessage(error.message || "Could not calculate your order total. Please try again.", "error");
+    return;
+  }
+
   const { data, error } = await supabaseClient.rpc("place_order", {
     p_pickup_date_id: state.selectedDate.id,
     p_customer_name: details.name,
@@ -950,6 +1080,8 @@ async function submitReviewedOrder() {
     p_payment_method: details.paymentMethod,
     p_invoice_requested: invoiceRequested,
     p_coupon_code: state.coupon?.code || null,
+    p_fulfillment_method: details.fulfillmentMethod,
+    p_shipping_address: details.fulfillmentMethod === "shipping" ? details.shippingAddress : null,
     p_items: items
   });
 
@@ -969,7 +1101,7 @@ async function submitReviewedOrder() {
   }
 
   const result = Array.isArray(data) ? data[0] : data;
-  showSuccess(result, details.paymentMethod, invoiceRequested, selectedItemsWithDetails(), details, state.coupon);
+  showSuccess(result, details.paymentMethod, invoiceRequested, selectedItemsWithDetails(), details, state.coupon, state.orderTotals);
   await refreshSelectedDate();
 }
 
@@ -992,7 +1124,7 @@ async function refreshSelectedDate() {
   }
 }
 
-function showSuccess(result, paymentMethod, invoiceRequested, items, details, coupon) {
+function showSuccess(result, paymentMethod, invoiceRequested, items, details, coupon, totals) {
   const payment = STORE_SETTINGS.paymentOptions[paymentMethod];
   const linkIsUsable = /^https?:\/\//.test(payment?.link || "");
   const paymentAction = linkIsUsable
@@ -1013,14 +1145,18 @@ function showSuccess(result, paymentMethod, invoiceRequested, items, details, co
 
   el.successContent.innerHTML = `
     <dl class="receipt">
-      <div><dt>Pickup</dt><dd>${prettyDate(state.selectedDate.pickup_date)}</dd></div>
+      <div><dt>${details.fulfillmentMethod === "shipping" ? "Ship date" : "Pickup"}</dt><dd>${prettyDate(state.selectedDate.pickup_date)}</dd></div>
       <div><dt>Order code</dt><dd>${result.order_code}</dd></div>
       <div><dt>Total</dt><dd>${money(result.total_cents)}</dd></div>
       ${coupon ? `<div><dt>Coupon</dt><dd>${coupon.code} (-${money(coupon.discount_cents)})</dd></div>` : ""}
       <div><dt>Payment</dt><dd data-payment-label></dd></div>
+      <div><dt>Method</dt><dd>${fulfillmentLabel(details.fulfillmentMethod)}</dd></div>
       <div><dt>Receipt email</dt><dd>${invoiceRequested ? "Requested" : "Not requested"}</dd></div>
       ${invoiceRequested ? `<div><dt>Email</dt><dd>${details.email}</dd></div>` : ""}
     </dl>
+    ${details.fulfillmentMethod === "shipping" ? `
+      <p class="admin-notes"><strong>Shipping address:</strong> ${escapeHtml(details.shippingAddress)}</p>
+    ` : ""}
     <div class="success-actions">
       <button class="copy-button" type="button" data-copy-order-code="${result.order_code}">
         Copy order code
@@ -1060,27 +1196,35 @@ function showSuccess(result, paymentMethod, invoiceRequested, items, details, co
         </div>
       `).join("")}
     </div>
-    ${details.notes ? `<p class="admin-notes"><strong>Questions/comments:</strong> ${details.notes}</p>` : ""}
-    ${coupon ? `
-      <div class="summary">
-        <div class="total-lines">
-          <div><span>Subtotal</span><span>${money(selectedTotalCents())}</span></div>
-          <div class="discount-line"><span>Coupon ${coupon.code}</span><span>-${money(coupon.discount_cents)}</span></div>
-          <div><strong>Total</strong><strong>${money(result.total_cents)}</strong></div>
-        </div>
+    ${details.notes ? `<p class="admin-notes"><strong>Questions/comments:</strong> ${escapeHtml(details.notes)}</p>` : ""}
+    <div class="summary">
+      <div class="total-lines">
+        <div><span>Subtotal</span><span>${money(selectedTotalCents())}</span></div>
+        ${coupon ? `<div class="discount-line"><span>Coupon ${coupon.code}</span><span>-${money(coupon.discount_cents)}</span></div>` : ""}
+        <div><span>Tax</span><span>${money(totals?.tax_cents || 0)}</span></div>
+        ${totals?.shipping_cents ? `<div><span>Shipping</span><span>${money(totals.shipping_cents)}</span></div>` : ""}
+        <div><strong>Total</strong><strong>${money(result.total_cents)}</strong></div>
       </div>
-    ` : ""}
-    <div class="pickup-details">
-      <h3>Pickup details</h3>
-      <p>
-        Pickup is on ${prettyDate(state.selectedDate.pickup_date)} between ${STORE_SETTINGS.pickupWindow}.
-      </p>
-      <p>
-        Address: ${STORE_SETTINGS.pickupAddress}<br>
-        Gate Code: ${STORE_SETTINGS.gateCode}<br>
-        Please call/text with any questions: ${STORE_SETTINGS.contactPhone}.
-      </p>
     </div>
+    ${details.fulfillmentMethod === "shipping" ? `
+      <div class="pickup-details">
+        <h3>Shipping details</h3>
+        <p>Your order is planned for ${prettyDate(state.selectedDate.pickup_date)}.</p>
+        <p>Please call/text with any questions: ${STORE_SETTINGS.contactPhone}.</p>
+      </div>
+    ` : `
+      <div class="pickup-details">
+        <h3>Pickup details</h3>
+        <p>
+          Pickup is on ${prettyDate(state.selectedDate.pickup_date)} between ${STORE_SETTINGS.pickupWindow}.
+        </p>
+        <p>
+          Address: ${STORE_SETTINGS.pickupAddress}<br>
+          Gate Code: ${STORE_SETTINGS.gateCode}<br>
+          Please call/text with any questions: ${STORE_SETTINGS.contactPhone}.
+        </p>
+      </div>
+    `}
     <button class="secondary-button" type="button" id="make-another-order">
       Make another order
     </button>
@@ -1098,6 +1242,7 @@ function showSuccess(result, paymentMethod, invoiceRequested, items, details, co
 
   renderSuccessPaymentDetails(paymentMethod);
   el.form.reset();
+  updateShippingFields();
   el.invoiceRequested.checked = false;
   updateInvoiceEmailField();
   resetCoupon();
@@ -1110,6 +1255,7 @@ async function startAnotherOrder() {
   state.lastOrder = null;
   state.selectedDate = null;
   state.quantities = {};
+  state.orderTotals = null;
   resetCoupon();
   el.couponCode.value = "";
 

@@ -12,6 +12,7 @@ create table if not exists public.products (
   display_group text,
   option_label text,
   image_url text,
+  shippable boolean not null default false,
   active boolean not null default true,
   sort_order integer not null default 0
 );
@@ -53,9 +54,13 @@ create table if not exists public.orders (
   payment_method text not null check (payment_method in ('Venmo','Zelle','PayPal','CashApp','CashAtPickup')),
   subtotal_cents integer not null default 0,
   discount_cents integer not null default 0 check (discount_cents >= 0),
+  tax_cents integer not null default 0 check (tax_cents >= 0),
+  shipping_cents integer not null default 0 check (shipping_cents >= 0),
   coupon_code text references public.coupons(code),
   total_cents integer not null default 0,
   total_loaves integer not null check (total_loaves >= 0),
+  fulfillment_method text not null default 'pickup' check (fulfillment_method in ('pickup','shipping')),
+  shipping_address text,
   invoice_requested boolean not null default false,
   invoice_sent boolean not null default false,
   created_at timestamptz not null default now()
@@ -81,6 +86,12 @@ create table if not exists public.app_settings (
 
 insert into public.app_settings (key, value)
 values ('google_sheet_sync_token', 'REPLACE_WITH_YOUR_GOOGLE_SHEET_SYNC_TOKEN')
+on conflict (key) do nothing;
+
+insert into public.app_settings (key, value)
+values
+  ('tax_rate_basis_points', '0'),
+  ('shipping_flat_cents', '0')
 on conflict (key) do nothing;
 
 create index if not exists idx_pickup_dates_open_future
@@ -115,7 +126,19 @@ alter table public.orders
 add column if not exists discount_cents integer not null default 0;
 
 alter table public.orders
+add column if not exists tax_cents integer not null default 0;
+
+alter table public.orders
+add column if not exists shipping_cents integer not null default 0;
+
+alter table public.orders
 add column if not exists coupon_code text;
+
+alter table public.orders
+add column if not exists fulfillment_method text not null default 'pickup';
+
+alter table public.orders
+add column if not exists shipping_address text;
 
 alter table public.orders
 drop constraint if exists orders_coupon_code_fkey;
@@ -161,6 +184,9 @@ alter table public.products
 add column if not exists image_url text;
 
 alter table public.products
+add column if not exists shippable boolean not null default false;
+
+alter table public.products
 drop constraint if exists products_capacity_units_check;
 
 alter table public.products
@@ -179,7 +205,20 @@ drop constraint if exists orders_discount_cents_check;
 
 alter table public.orders
 add constraint orders_discount_cents_check
-check (discount_cents >= 0 and discount_cents <= subtotal_cents and total_cents = subtotal_cents - discount_cents);
+check (
+  discount_cents >= 0
+  and tax_cents >= 0
+  and shipping_cents >= 0
+  and discount_cents <= subtotal_cents
+  and total_cents = subtotal_cents - discount_cents + tax_cents + shipping_cents
+);
+
+alter table public.orders
+drop constraint if exists orders_fulfillment_method_check;
+
+alter table public.orders
+add constraint orders_fulfillment_method_check
+check (fulfillment_method in ('pickup','shipping'));
 
 alter table public.orders
 drop constraint if exists orders_payment_method_check;
@@ -295,7 +334,10 @@ using (public.is_admin());
 drop function if exists public.place_order(uuid,text,text,text,text,text,jsonb);
 drop function if exists public.place_order(uuid,text,text,text,text,text,boolean,jsonb);
 drop function if exists public.place_order(uuid,text,text,text,text,text,boolean,text,jsonb);
+drop function if exists public.place_order(uuid,text,text,text,text,text,boolean,text,text,text,jsonb);
 drop function if exists public.validate_coupon_code(text,integer);
+drop function if exists public.calculate_order_totals(integer,integer,text);
+drop function if exists public.calculate_order_totals(integer,text);
 drop function if exists public.get_order_invoice(text);
 drop function if exists public.get_sheet_sync_orders(text);
 drop function if exists public.mark_sheet_invoice_sent(text,text);
@@ -309,6 +351,7 @@ drop function if exists public.admin_list_pickup_dates();
 drop function if exists public.admin_save_pickup_date(uuid,date,integer,boolean);
 drop function if exists public.admin_list_products();
 drop function if exists public.admin_update_product_active(uuid,boolean);
+drop function if exists public.admin_update_product_flags(uuid,boolean,boolean);
 
 create or replace function public.validate_coupon_code(
   p_coupon_code text,
@@ -383,6 +426,60 @@ begin
 end;
 $$;
 
+create or replace function public.calculate_order_totals(
+  p_discounted_subtotal_cents integer,
+  p_shipping_method text
+)
+returns table(
+  tax_cents integer,
+  shipping_cents integer,
+  final_total_cents integer
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_discounted_subtotal integer;
+  v_tax_rate_basis_points integer;
+  v_shipping_cents integer;
+  v_method text;
+begin
+  v_discounted_subtotal := greatest(coalesce(p_discounted_subtotal_cents, 0), 0);
+  v_method := lower(trim(coalesce(p_shipping_method, 'pickup')));
+
+  if v_method not in ('pickup', 'shipping') then
+    raise exception 'Invalid fulfillment method';
+  end if;
+
+  select coalesce(nullif(value, '')::integer, 0)
+  into v_tax_rate_basis_points
+  from public.app_settings
+  where key = 'tax_rate_basis_points';
+
+  select coalesce(nullif(value, '')::integer, 0)
+  into v_shipping_cents
+  from public.app_settings
+  where key = 'shipping_flat_cents';
+
+  v_tax_rate_basis_points := greatest(coalesce(v_tax_rate_basis_points, 0), 0);
+
+  if v_method <> 'shipping' then
+    v_shipping_cents := 0;
+  end if;
+
+  v_shipping_cents := greatest(coalesce(v_shipping_cents, 0), 0);
+
+  return query
+  select
+    round(v_discounted_subtotal * v_tax_rate_basis_points / 10000.0)::integer,
+    v_shipping_cents,
+    v_discounted_subtotal
+      + round(v_discounted_subtotal * v_tax_rate_basis_points / 10000.0)::integer
+      + v_shipping_cents;
+end;
+$$;
+
 create or replace function public.place_order(
   p_pickup_date_id uuid,
   p_customer_name text,
@@ -392,6 +489,8 @@ create or replace function public.place_order(
   p_payment_method text,
   p_invoice_requested boolean,
   p_coupon_code text,
+  p_fulfillment_method text,
+  p_shipping_address text,
   p_items jsonb
 )
 returns table(order_id uuid, order_code text, total_cents integer)
@@ -411,9 +510,13 @@ declare
   v_quantity integer;
   v_price integer;
   v_capacity_units integer;
+  v_shippable boolean;
   v_coupon record;
   v_coupon_code text;
   v_discount integer;
+  v_totals record;
+  v_fulfillment_method text;
+  v_shipping_address text;
 begin
   if p_payment_method not in ('Venmo', 'Zelle', 'PayPal', 'CashApp', 'CashAtPickup') then
     raise exception 'Invalid payment method';
@@ -435,6 +538,17 @@ begin
 
   if jsonb_typeof(p_items) is distinct from 'array' then
     raise exception 'Order items must be an array';
+  end if;
+
+  v_fulfillment_method := lower(trim(coalesce(p_fulfillment_method, 'pickup')));
+  v_shipping_address := nullif(trim(coalesce(p_shipping_address, '')), '');
+
+  if v_fulfillment_method not in ('pickup', 'shipping') then
+    raise exception 'Invalid fulfillment method';
+  end if;
+
+  if v_fulfillment_method = 'shipping' and v_shipping_address is null then
+    raise exception 'Shipping address is required';
   end if;
 
   if exists (
@@ -480,14 +594,18 @@ begin
   loop
     v_quantity := (v_item->>'quantity')::integer;
 
-    select price_cents, capacity_units
-    into v_price, v_capacity_units
+    select price_cents, capacity_units, shippable
+    into v_price, v_capacity_units, v_shippable
     from products
     where id = (v_item->>'product_id')::uuid
       and active = true;
 
     if v_price is null then
       raise exception 'Invalid product';
+    end if;
+
+    if v_fulfillment_method = 'shipping' and not coalesce(v_shippable, false) then
+      raise exception 'One or more selected items cannot be shipped';
     end if;
 
     v_total := v_total + v_price * v_quantity;
@@ -517,6 +635,10 @@ begin
     v_coupon_code := null;
   end if;
 
+  select *
+  into v_totals
+  from public.calculate_order_totals(v_total - v_discount, v_fulfillment_method);
+
   insert into orders (
     pickup_date_id,
     customer_name,
@@ -528,8 +650,12 @@ begin
     coupon_code,
     subtotal_cents,
     discount_cents,
+    tax_cents,
+    shipping_cents,
     total_cents,
-    total_loaves
+    total_loaves,
+    fulfillment_method,
+    shipping_address
   )
   values (
     p_pickup_date_id,
@@ -542,8 +668,12 @@ begin
     v_coupon_code,
     v_total,
     v_discount,
-    v_total - v_discount,
-    v_requested
+    v_totals.tax_cents,
+    v_totals.shipping_cents,
+    v_totals.final_total_cents,
+    v_requested,
+    v_fulfillment_method,
+    case when v_fulfillment_method = 'shipping' then v_shipping_address else null end
   )
   returning id into v_order_id;
 
@@ -574,7 +704,7 @@ begin
     );
   end loop;
 
-  return query select v_order_id, v_order_code, v_total - v_discount;
+  return query select v_order_id, v_order_code, v_totals.final_total_cents;
 end;
 $$;
 
@@ -622,8 +752,12 @@ returns table(
   coupon_code text,
   subtotal_cents integer,
   discount_cents integer,
+  tax_cents integer,
+  shipping_cents integer,
   total_cents integer,
   total_loaves integer,
+  fulfillment_method text,
+  shipping_address text,
   created_at timestamptz,
   items jsonb
 )
@@ -645,8 +779,12 @@ begin
     o.coupon_code,
     o.subtotal_cents,
     o.discount_cents,
+    o.tax_cents,
+    o.shipping_cents,
     o.total_cents,
     o.total_loaves,
+    o.fulfillment_method,
+    o.shipping_address,
     o.created_at,
     coalesce(
       jsonb_agg(
@@ -656,7 +794,8 @@ begin
           'unit_price_cents', oi.unit_price_cents,
           'display_group', p.display_group,
           'option_label', p.option_label,
-          'image_url', p.image_url
+          'image_url', p.image_url,
+          'shippable', p.shippable
         )
         order by coalesce(p.display_group, p.name), p.sort_order, coalesce(p.option_label, p.name), p.name
       ) filter (where oi.id is not null),
@@ -689,8 +828,12 @@ returns table(
   coupon_code text,
   subtotal_cents integer,
   discount_cents integer,
+  tax_cents integer,
+  shipping_cents integer,
   total_cents integer,
   total_loaves integer,
+  fulfillment_method text,
+  shipping_address text,
   notes text,
   items jsonb
 )
@@ -724,8 +867,12 @@ begin
     o.coupon_code,
     o.subtotal_cents,
     o.discount_cents,
+    o.tax_cents,
+    o.shipping_cents,
     o.total_cents,
     o.total_loaves,
+    o.fulfillment_method,
+    o.shipping_address,
     o.notes,
     coalesce(
       jsonb_agg(
@@ -809,8 +956,12 @@ returns table(
   coupon_code text,
   subtotal_cents integer,
   discount_cents integer,
+  tax_cents integer,
+  shipping_cents integer,
   total_cents integer,
   total_loaves integer,
+  fulfillment_method text,
+  shipping_address text,
   created_at timestamptz,
   items jsonb
 )
@@ -841,8 +992,12 @@ begin
     o.coupon_code,
     o.subtotal_cents,
     o.discount_cents,
+    o.tax_cents,
+    o.shipping_cents,
     o.total_cents,
     o.total_loaves,
+    o.fulfillment_method,
+    o.shipping_address,
     o.created_at,
     coalesce(
       jsonb_agg(
@@ -853,7 +1008,8 @@ begin
           'capacity_units', p.capacity_units,
           'category', p.category,
           'display_group', p.display_group,
-          'option_label', p.option_label
+          'option_label', p.option_label,
+          'shippable', p.shippable
         )
         order by coalesce(p.display_group, p.name), coalesce(p.option_label, p.name), p.name
       ) filter (where oi.id is not null),
@@ -1032,6 +1188,7 @@ returns table(
   display_group text,
   option_label text,
   image_url text,
+  shippable boolean,
   active boolean,
   sort_order integer
 )
@@ -1055,6 +1212,7 @@ begin
     p.display_group,
     p.option_label,
     p.image_url,
+    p.shippable,
     p.active,
     p.sort_order
   from public.products p
@@ -1062,11 +1220,12 @@ begin
 end;
 $$;
 
-create or replace function public.admin_update_product_active(
+create or replace function public.admin_update_product_flags(
   p_product_id uuid,
-  p_active boolean
+  p_active boolean,
+  p_shippable boolean
 )
-returns table(saved_id uuid, saved_active boolean)
+returns table(saved_id uuid, saved_active boolean, saved_shippable boolean)
 language plpgsql
 security definer
 set search_path = public
@@ -1077,9 +1236,11 @@ begin
   end if;
 
   update public.products as p
-  set active = p_active
+  set
+    active = p_active,
+    shippable = p_shippable
   where p.id = p_product_id
-  returning p.id, p.active into saved_id, saved_active;
+  returning p.id, p.active, p.shippable into saved_id, saved_active, saved_shippable;
 
   if saved_id is null then
     raise exception 'Product not found';
@@ -1089,11 +1250,14 @@ begin
 end;
 $$;
 
-revoke all on function public.place_order(uuid,text,text,text,text,text,boolean,text,jsonb) from public;
-grant execute on function public.place_order(uuid,text,text,text,text,text,boolean,text,jsonb) to anon, authenticated;
+revoke all on function public.place_order(uuid,text,text,text,text,text,boolean,text,text,text,jsonb) from public;
+grant execute on function public.place_order(uuid,text,text,text,text,text,boolean,text,text,text,jsonb) to anon, authenticated;
 
 revoke all on function public.validate_coupon_code(text,integer) from public;
 grant execute on function public.validate_coupon_code(text,integer) to anon, authenticated;
+
+revoke all on function public.calculate_order_totals(integer,text) from public;
+grant execute on function public.calculate_order_totals(integer,text) to anon, authenticated;
 
 revoke all on function public.get_order_invoice(text) from public;
 grant execute on function public.get_order_invoice(text) to anon, authenticated;
@@ -1125,8 +1289,8 @@ grant execute on function public.admin_save_pickup_date(uuid,date,integer,boolea
 revoke all on function public.admin_list_products() from public;
 grant execute on function public.admin_list_products() to authenticated;
 
-revoke all on function public.admin_update_product_active(uuid,boolean) from public;
-grant execute on function public.admin_update_product_active(uuid,boolean) to authenticated;
+revoke all on function public.admin_update_product_flags(uuid,boolean,boolean) from public;
+grant execute on function public.admin_update_product_flags(uuid,boolean,boolean) to authenticated;
 
 grant select on public.products to anon, authenticated;
 grant select on public.pickup_dates to anon, authenticated;

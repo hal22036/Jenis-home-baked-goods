@@ -1,6 +1,6 @@
 const SUPABASE_URL = "https://qvxrbipxxlygmmecgjxf.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_-w4Ef_bqgM_l9bY00thSpg_xohk7e9M";
-const SYNC_TOKEN = "REPLACE_WITH_YOUR_GOOGLE_SHEET_SYNC_TOKEN";
+const SYNC_TOKEN = "fP3pzQgRx6MmgForhqGApPsCAQ9QwwzmcufvoNLG";
 const OWNER_EMAIL = "jenika19@hotmail.com";
 const WEBSITE_URL = "https://jenisgoods.com";
 const PICKUP_DETAILS = "Pickup is between 4-7 pm at 7140 Anchor Terrace St. Gate Code: #7716.";
@@ -90,7 +90,17 @@ function writeOrdersToSheet(ordersSheet, orderItemsSheet, newOrders) {
     const orderDate = localDate(order.pickup_date);
     const orderRowNumber = nextOrderRow++;
     const discountCents = Number(order.discount_cents || 0);
-    const notes = [order.notes || "", discountCents ? `Coupon ${order.coupon_code}: -${money(discountCents)}` : ""]
+    const taxCents = Number(order.tax_cents || 0);
+    const shippingCents = Number(order.shipping_cents || 0);
+    const adjustmentCents = taxCents + shippingCents - discountCents;
+    const notes = [
+      order.notes || "",
+      `Method: ${fulfillmentLabel(order.fulfillment_method)}`,
+      order.shipping_address ? `Shipping address: ${order.shipping_address}` : "",
+      discountCents ? `Coupon ${order.coupon_code}: -${money(discountCents)}` : "",
+      taxCents ? `Tax: ${money(taxCents)}` : "",
+      shippingCents ? `Shipping: ${money(shippingCents)}` : ""
+    ]
       .filter(Boolean)
       .join(" | ");
 
@@ -99,7 +109,7 @@ function writeOrdersToSheet(ordersSheet, orderItemsSheet, newOrders) {
       orderDate,
       order.customer_name || "",
       paymentLabel(order.payment_method),
-      discountCents ? -centsToDollars(discountCents) : "",
+      adjustmentCents ? centsToDollars(adjustmentCents) : "",
       `=IF(A${orderRowNumber}="","",SUMIF('Order Items'!$A:$A,A${orderRowNumber},'Order Items'!$G:$G))`,
       `=IF(A${orderRowNumber}="","",F${orderRowNumber}+N(E${orderRowNumber}))`,
       `=IF(A${orderRowNumber}="","",SUMIF('Order Items'!$A:$A,A${orderRowNumber},'Order Items'!$H:$H))`,
@@ -217,8 +227,12 @@ function ownerOrderHtml(order) {
     <p><strong>Email:</strong> ${escapeHtml(order.customer_email || "Not provided")}</p>
     <p><strong>Payment:</strong> ${escapeHtml(paymentLabel(order.payment_method))}</p>
     ${order.notes ? `<p><strong>Questions/comments:</strong> ${escapeHtml(order.notes)}</p>` : ""}
+    <p><strong>Method:</strong> ${escapeHtml(fulfillmentLabel(order.fulfillment_method))}</p>
+    ${order.shipping_address ? `<p><strong>Shipping address:</strong> ${escapeHtml(order.shipping_address)}</p>` : ""}
     ${itemsHtml(order)}
     ${order.discount_cents ? `<p><strong>Coupon:</strong> ${escapeHtml(order.coupon_code || "")} (-${money(order.discount_cents)})</p>` : ""}
+    <p><strong>Tax:</strong> ${money(order.tax_cents || 0)}</p>
+    ${order.shipping_cents ? `<p><strong>Shipping:</strong> ${money(order.shipping_cents)}</p>` : ""}
     <p><strong>Total:</strong> ${money(order.total_cents)}</p>
     <p><a href="${WEBSITE_URL}/admin.html">Open admin orders</a></p>
   `;
@@ -239,7 +253,9 @@ function customerInvoiceHtml(order) {
     <p>If the button does not open, copy and paste this link:</p>
     <p><a href="${invoiceUrl}">${invoiceUrl}</a></p>
     <p><strong>Pickup:</strong> ${escapeHtml(formatDate(order.pickup_date))}, 4-7 pm</p>
-    <p>${escapeHtml(PICKUP_DETAILS)}</p>
+    ${order.fulfillment_method === "shipping" ? `
+      <p><strong>Shipping address:</strong> ${escapeHtml(order.shipping_address || "")}</p>
+    ` : `<p>${escapeHtml(PICKUP_DETAILS)}</p>`}
     <p>Please call/text with any questions: ${escapeHtml(CONTACT_PHONE)}</p>
     <p>Thank you,<br />Jeni</p>
   `;
@@ -278,10 +294,14 @@ function plainOrderText(order) {
     `Phone: ${order.customer_phone || ""}`,
     `Email: ${order.customer_email || "Not provided"}`,
     `Payment: ${paymentLabel(order.payment_method)}`,
+    `Method: ${fulfillmentLabel(order.fulfillment_method)}`,
+    order.shipping_address ? `Shipping address: ${order.shipping_address}` : "",
     "",
     plainItemsText(order),
     "",
     order.discount_cents ? `Coupon ${order.coupon_code || ""}: -${money(order.discount_cents)}` : "",
+    `Tax: ${money(order.tax_cents || 0)}`,
+    order.shipping_cents ? `Shipping: ${money(order.shipping_cents)}` : "",
     `Total: ${money(order.total_cents)}`,
     order.notes ? `Questions/comments: ${order.notes}` : ""
   ].join("\n");
@@ -297,8 +317,12 @@ function plainInvoiceText(order) {
     `Your invoice for order ${order.order_code} is ready.`,
     `View, save, or print your invoice here: ${invoiceUrl}`,
     "",
-    `Pickup: ${formatDate(order.pickup_date)}, 4-7 pm`,
-    PICKUP_DETAILS,
+    order.fulfillment_method === "shipping"
+      ? `Ship date: ${formatDate(order.pickup_date)}`
+      : `Pickup: ${formatDate(order.pickup_date)}, 4-7 pm`,
+    order.fulfillment_method === "shipping"
+      ? `Shipping address: ${order.shipping_address || ""}`
+      : PICKUP_DETAILS,
     `Please call/text with any questions: ${CONTACT_PHONE}`,
     "",
     "Thank you,",
@@ -395,6 +419,10 @@ function paymentLabel(value) {
     CashApp: "CashApp",
     CashAtPickup: "Cash at Pickup"
   }[value] || value || "";
+}
+
+function fulfillmentLabel(value) {
+  return value === "shipping" ? "Shipping" : "Pickup";
 }
 
 function escapeHtml(value) {

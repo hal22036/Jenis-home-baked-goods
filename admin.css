@@ -168,6 +168,11 @@
   background: var(--surface-soft);
 }
 
+.admin-product-checks {
+  display: grid;
+  gap: 8px;
+}
+
 .status-grid,
 .date-admin-form {
   display: grid;

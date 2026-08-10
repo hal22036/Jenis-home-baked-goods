@@ -76,19 +76,29 @@ function paymentLabel(value) {
   }[value] || value;
 }
 
+function fulfillmentLabel(value) {
+  return value === "shipping" ? "Shipping" : "Pickup";
+}
+
 function renderInvoice(order) {
   const items = order.items || [];
+  const isShipping = order.fulfillment_method === "shipping";
 
   content.innerHTML = `
     <dl class="receipt invoice-receipt">
       <div><dt>Order code</dt><dd>${escapeHtml(order.order_code)}</dd></div>
       <div><dt>Order placed</dt><dd>${prettyDateTime(order.created_at)}</dd></div>
-      <div><dt>Pickup</dt><dd>${prettyDate(order.pickup_date)}, ${PICKUP_WINDOW}</dd></div>
+      <div><dt>${isShipping ? "Ship date" : "Pickup"}</dt><dd>${prettyDate(order.pickup_date)}${isShipping ? "" : `, ${PICKUP_WINDOW}`}</dd></div>
       <div><dt>Name</dt><dd>${escapeHtml(order.customer_name)}</dd></div>
       <div><dt>Phone</dt><dd>${escapeHtml(order.customer_phone)}</dd></div>
       ${order.customer_email ? `<div><dt>Email</dt><dd>${escapeHtml(order.customer_email)}</dd></div>` : ""}
       <div><dt>Payment</dt><dd>${escapeHtml(paymentLabel(order.payment_method))}</dd></div>
+      <div><dt>Method</dt><dd>${escapeHtml(fulfillmentLabel(order.fulfillment_method))}</dd></div>
     </dl>
+
+    ${isShipping ? `
+      <p class="admin-notes"><strong>Shipping address:</strong> ${escapeHtml(order.shipping_address || "")}</p>
+    ` : ""}
 
     <div class="invoice-items">
       ${items.map(item => `
@@ -113,19 +123,31 @@ function renderInvoice(order) {
             <span>-${money(order.discount_cents)}</span>
           </div>
         ` : ""}
+        <div><span>Tax</span><span>${money(order.tax_cents || 0)}</span></div>
+        ${order.shipping_cents ? `
+          <div><span>Shipping</span><span>${money(order.shipping_cents)}</span></div>
+        ` : ""}
         <div><strong>Total</strong><strong>${money(order.total_cents)}</strong></div>
       </div>
     </div>
 
-    <div class="pickup-details">
-      <h3>Pickup details</h3>
-      <p>Pickup is on ${prettyDate(order.pickup_date)} between ${PICKUP_WINDOW}.</p>
-      <p>
-        Address: ${PICKUP_ADDRESS}<br>
-        Gate Code: ${GATE_CODE}<br>
-        Please call/text with any questions: ${CONTACT_PHONE}.
-      </p>
-    </div>
+    ${isShipping ? `
+      <div class="pickup-details">
+        <h3>Shipping details</h3>
+        <p>Your order is planned for ${prettyDate(order.pickup_date)}.</p>
+        <p>Please call/text with any questions: ${CONTACT_PHONE}.</p>
+      </div>
+    ` : `
+      <div class="pickup-details">
+        <h3>Pickup details</h3>
+        <p>Pickup is on ${prettyDate(order.pickup_date)} between ${PICKUP_WINDOW}.</p>
+        <p>
+          Address: ${PICKUP_ADDRESS}<br>
+          Gate Code: ${GATE_CODE}<br>
+          Please call/text with any questions: ${CONTACT_PHONE}.
+        </p>
+      </div>
+    `}
   `;
 
   content.hidden = false;

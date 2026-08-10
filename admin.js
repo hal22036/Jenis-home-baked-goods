@@ -244,10 +244,17 @@ function orderCardMarkup(order) {
         <div><dt>Phone</dt><dd><a href="tel:${order.customer_phone}">${order.customer_phone}</a></dd></div>
         <div><dt>Email</dt><dd>${order.customer_email ? `<a href="mailto:${order.customer_email}">${order.customer_email}</a>` : "Not provided"}</dd></div>
         <div><dt>Payment</dt><dd>${paymentLabel(order.payment_method)}</dd></div>
+        <div><dt>Method</dt><dd>${fulfillmentLabel(order.fulfillment_method)}</dd></div>
         <div><dt>Receipt email</dt><dd>${invoiceStatusLabel(order)}</dd></div>
         <div><dt>Loaf spots</dt><dd>${order.total_loaves}</dd></div>
         ${order.discount_cents ? `<div><dt>Coupon</dt><dd>${order.coupon_code} (-${money(order.discount_cents)})</dd></div>` : ""}
+        <div><dt>Tax</dt><dd>${money(order.tax_cents || 0)}</dd></div>
+        ${order.shipping_cents ? `<div><dt>Shipping</dt><dd>${money(order.shipping_cents)}</dd></div>` : ""}
       </dl>
+
+      ${order.fulfillment_method === "shipping" ? `
+        <p class="admin-notes"><strong>Shipping address:</strong> ${order.shipping_address || ""}</p>
+      ` : ""}
 
       <div class="admin-items">
         ${(order.items || []).map(item => `
@@ -322,6 +329,10 @@ function paymentLabel(value) {
     CashApp: "CashApp",
     CashAtPickup: "Cash at Pickup"
   }[value] || value;
+}
+
+function fulfillmentLabel(value) {
+  return value === "shipping" ? "Shipping" : "Pickup";
 }
 
 function adminItemName(item) {
@@ -424,34 +435,45 @@ function renderProducts() {
           <article class="admin-product-row ${product.active ? "" : "is-inactive"}" data-product-id="${product.id}">
             <div>
               <strong>${product.display_group && product.option_label ? `${product.display_group} - ${product.option_label}` : product.name}</strong>
-              <p>${money(product.price_cents)} ${product.capacity_units > 0 ? "· counts toward loaf capacity" : "· add-on item"}</p>
+              <p>
+                ${money(product.price_cents)}
+                ${product.capacity_units > 0 ? "- counts toward loaf capacity" : "- add-on item"}
+                ${product.shippable ? "- can ship" : "- pickup only"}
+              </p>
             </div>
-            <label class="inline-check product-active-check">
-              <span>Offer this week</span>
-              <input type="checkbox" data-product-active ${product.active ? "checked" : ""} />
-            </label>
+            <div class="admin-product-checks">
+              <label class="inline-check product-active-check">
+                <span>Offer this week</span>
+                <input type="checkbox" data-product-active ${product.active ? "checked" : ""} />
+              </label>
+              <label class="inline-check product-active-check">
+                <span>Can ship</span>
+                <input type="checkbox" data-product-shippable ${product.shippable ? "checked" : ""} />
+              </label>
+            </div>
           </article>
         `).join("")}
       </div>
     </section>
   `).join("");
 
-  el.productsList.querySelectorAll("[data-product-active]").forEach(input => {
-    input.addEventListener("change", saveProductActive);
+  el.productsList.querySelectorAll("[data-product-active], [data-product-shippable]").forEach(input => {
+    input.addEventListener("change", saveProductFlags);
   });
 }
 
-async function saveProductActive(event) {
+async function saveProductFlags(event) {
   const input = event.currentTarget;
   const row = input.closest("[data-product-id]");
   const previousValue = !input.checked;
 
   input.disabled = true;
-  setMessage(el.productAdminMessage, "Saving product availability...");
+  setMessage(el.productAdminMessage, "Saving product settings...");
 
-  const { error } = await supabaseClient.rpc("admin_update_product_active", {
+  const { error } = await supabaseClient.rpc("admin_update_product_flags", {
     p_product_id: row.dataset.productId,
-    p_active: input.checked
+    p_active: row.querySelector("[data-product-active]").checked,
+    p_shippable: row.querySelector("[data-product-shippable]").checked
   });
 
   input.disabled = false;
@@ -462,8 +484,8 @@ async function saveProductActive(event) {
     return;
   }
 
-  row.classList.toggle("is-inactive", !input.checked);
-  setMessage(el.productAdminMessage, "Product availability saved.", "success");
+  row.classList.toggle("is-inactive", !row.querySelector("[data-product-active]").checked);
+  setMessage(el.productAdminMessage, "Product settings saved.", "success");
   await loadProducts();
 }
 

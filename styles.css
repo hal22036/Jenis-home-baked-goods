@@ -203,6 +203,26 @@ h2 {
   font-size: 1.15rem;
 }
 
+.shipping-badge {
+  display: inline-flex;
+  width: fit-content;
+  margin: 0 0 8px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.shipping-badge.can-ship {
+  background: #e3f2e8;
+  color: var(--success);
+}
+
+.shipping-badge.pickup-only {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
 .product p {
   margin: 0;
   color: var(--muted);
