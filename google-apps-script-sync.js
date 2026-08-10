@@ -97,7 +97,7 @@ function writeOrdersToSheet(ordersSheet, orderItemsSheet, newOrders) {
       order.notes || "",
       `Method: ${fulfillmentLabel(order.fulfillment_method)}`,
       order.shipping_address ? `Shipping address: ${order.shipping_address}` : "",
-      discountCents ? `Coupon ${order.coupon_code}: -${money(discountCents)}` : "",
+      discountCents ? `Coupon ${order.coupon_code} (${couponAppliesToLabel(order.coupon_applies_to)}): -${money(discountCents)}` : "",
       taxCents ? `Tax: ${money(taxCents)}` : "",
       shippingCents ? `Shipping: ${money(shippingCents)}` : ""
     ]
@@ -230,7 +230,7 @@ function ownerOrderHtml(order) {
     <p><strong>Method:</strong> ${escapeHtml(fulfillmentLabel(order.fulfillment_method))}</p>
     ${order.shipping_address ? `<p><strong>Shipping address:</strong> ${escapeHtml(order.shipping_address)}</p>` : ""}
     ${itemsHtml(order)}
-    ${order.discount_cents ? `<p><strong>Coupon:</strong> ${escapeHtml(order.coupon_code || "")} (-${money(order.discount_cents)})</p>` : ""}
+    ${order.discount_cents ? `<p><strong>Coupon:</strong> ${escapeHtml(order.coupon_code || "")} (${escapeHtml(couponAppliesToLabel(order.coupon_applies_to))}) -${money(order.discount_cents)}</p>` : ""}
     <p><strong>Tax:</strong> ${money(order.tax_cents || 0)}</p>
     ${order.shipping_cents ? `<p><strong>Shipping:</strong> ${money(order.shipping_cents)}</p>` : ""}
     <p><strong>Total:</strong> ${money(order.total_cents)}</p>
@@ -299,7 +299,7 @@ function plainOrderText(order) {
     "",
     plainItemsText(order),
     "",
-    order.discount_cents ? `Coupon ${order.coupon_code || ""}: -${money(order.discount_cents)}` : "",
+    order.discount_cents ? `Coupon ${order.coupon_code || ""} (${couponAppliesToLabel(order.coupon_applies_to)}): -${money(order.discount_cents)}` : "",
     `Tax: ${money(order.tax_cents || 0)}`,
     order.shipping_cents ? `Shipping: ${money(order.shipping_cents)}` : "",
     `Total: ${money(order.total_cents)}`,
@@ -423,6 +423,14 @@ function paymentLabel(value) {
 
 function fulfillmentLabel(value) {
   return value === "shipping" ? "Shipping" : "Pickup";
+}
+
+function couponAppliesToLabel(value) {
+  return {
+    items: "items",
+    shipping: "shipping",
+    order: "whole order"
+  }[value] || "order";
 }
 
 function escapeHtml(value) {

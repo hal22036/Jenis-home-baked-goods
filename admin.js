@@ -44,6 +44,7 @@ const el = {
   couponOriginalCode: document.querySelector("#coupon-original-code"),
   couponCodeInput: document.querySelector("#coupon-code-input"),
   couponDescriptionInput: document.querySelector("#coupon-description-input"),
+  couponAppliesToInput: document.querySelector("#coupon-applies-to-input"),
   couponTypeInput: document.querySelector("#coupon-type-input"),
   couponPercentField: document.querySelector("#coupon-percent-field"),
   couponPercentInput: document.querySelector("#coupon-percent-input"),
@@ -272,7 +273,7 @@ function orderCardMarkup(order) {
         <div><dt>Method</dt><dd>${fulfillmentLabel(order.fulfillment_method)}</dd></div>
         <div><dt>Receipt email</dt><dd>${invoiceStatusLabel(order)}</dd></div>
         <div><dt>Loaf spots</dt><dd>${order.total_loaves}</dd></div>
-        ${order.discount_cents ? `<div><dt>Coupon</dt><dd>${order.coupon_code} (-${money(order.discount_cents)})</dd></div>` : ""}
+        ${order.discount_cents ? `<div><dt>Coupon</dt><dd>${order.coupon_code} (${couponAppliesToLabel(order.coupon_applies_to)}) -${money(order.discount_cents)}</dd></div>` : ""}
         <div><dt>Tax</dt><dd>${money(order.tax_cents || 0)}</dd></div>
         ${order.shipping_cents ? `<div><dt>Shipping</dt><dd>${money(order.shipping_cents)}</dd></div>` : ""}
       </dl>
@@ -527,6 +528,14 @@ function discountLabel(coupon) {
   return `${money(coupon.amount_off_cents)} off`;
 }
 
+function couponAppliesToLabel(value) {
+  return {
+    items: "items",
+    shipping: "shipping",
+    order: "whole order"
+  }[value] || "items";
+}
+
 function couponDateRange(coupon) {
   if (!coupon.starts_on && !coupon.ends_on) return "No date limit";
   if (coupon.starts_on && coupon.ends_on) return `${prettyDate(coupon.starts_on)} - ${prettyDate(coupon.ends_on)}`;
@@ -574,6 +583,7 @@ function renderCoupons() {
         <p>${coupon.description || "No description"}</p>
         <p>
           ${discountLabel(coupon)}
+          - Applies to ${couponAppliesToLabel(coupon.applies_to)}
           - Minimum ${money(coupon.minimum_subtotal_cents)}
           - ${coupon.used_count || 0}${coupon.max_uses ? ` of ${coupon.max_uses}` : ""} used
           - ${couponDateRange(coupon)}
@@ -604,6 +614,7 @@ function editCoupon(event) {
   el.couponOriginalCode.value = coupon.code;
   el.couponCodeInput.value = coupon.code;
   el.couponDescriptionInput.value = coupon.description || "";
+  el.couponAppliesToInput.value = coupon.applies_to || "items";
   el.couponTypeInput.value = coupon.discount_type;
   el.couponPercentInput.value = coupon.percent_off || "";
   el.couponAmountInput.value = coupon.amount_off_cents ? centsToDollars(coupon.amount_off_cents) : "";
@@ -620,6 +631,7 @@ function clearCouponForm() {
   el.couponOriginalCode.value = "";
   el.couponCodeInput.value = "";
   el.couponDescriptionInput.value = "";
+  el.couponAppliesToInput.value = "items";
   el.couponTypeInput.value = "percent";
   el.couponPercentInput.value = "10";
   el.couponAmountInput.value = "";
@@ -641,6 +653,7 @@ el.couponForm.addEventListener("submit", async event => {
     p_original_code: el.couponOriginalCode.value || null,
     p_code: el.couponCodeInput.value,
     p_description: el.couponDescriptionInput.value,
+    p_applies_to: el.couponAppliesToInput.value,
     p_discount_type: el.couponTypeInput.value,
     p_percent_off: isPercent ? Number(el.couponPercentInput.value) : null,
     p_amount_off_cents: isPercent ? null : dollarsToCents(el.couponAmountInput.value),

@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bakery Admin | Jeni's Home Baked Goods</title>
-  <link rel="stylesheet" href="styles.css?v=20260810-admin-coupons" />
-  <link rel="stylesheet" href="admin.css?v=20260810-admin-coupons" />
+  <link rel="stylesheet" href="styles.css?v=20260810-shipping-coupons" />
+  <link rel="stylesheet" href="admin.css?v=20260810-shipping-coupons" />
 </head>
 <body>
   <header class="site-header admin-header">
@@ -104,6 +104,14 @@
           <input id="coupon-description-input" placeholder="10% off opening week" />
         </label>
         <label>
+          Applies to
+          <select id="coupon-applies-to-input" required>
+            <option value="items">Items only</option>
+            <option value="shipping">Shipping only</option>
+            <option value="order">Whole order</option>
+          </select>
+        </label>
+        <label>
           Discount type
           <select id="coupon-type-input" required>
             <option value="percent">Percent off</option>
@@ -178,6 +186,6 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="admin.js?v=20260810-admin-coupons"></script>
+  <script src="admin.js?v=20260810-shipping-coupons"></script>
 </body>
 </html>

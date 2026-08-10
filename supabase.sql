@@ -27,6 +27,7 @@ create table if not exists public.pickup_dates (
 create table if not exists public.coupons (
   code text primary key,
   description text,
+  applies_to text not null default 'items' check (applies_to in ('items','shipping','order')),
   discount_type text not null check (discount_type in ('percent','amount')),
   percent_off integer check (percent_off between 1 and 100),
   amount_off_cents integer check (amount_off_cents > 0),
@@ -57,6 +58,7 @@ create table if not exists public.orders (
   tax_cents integer not null default 0 check (tax_cents >= 0),
   shipping_cents integer not null default 0 check (shipping_cents >= 0),
   coupon_code text references public.coupons(code),
+  coupon_applies_to text,
   total_cents integer not null default 0,
   total_loaves integer not null check (total_loaves >= 0),
   fulfillment_method text not null default 'pickup' check (fulfillment_method in ('pickup','shipping')),
@@ -135,6 +137,9 @@ alter table public.orders
 add column if not exists coupon_code text;
 
 alter table public.orders
+add column if not exists coupon_applies_to text;
+
+alter table public.orders
 add column if not exists fulfillment_method text not null default 'pickup';
 
 alter table public.orders
@@ -186,6 +191,16 @@ add column if not exists image_url text;
 alter table public.products
 add column if not exists shippable boolean not null default false;
 
+alter table public.coupons
+add column if not exists applies_to text not null default 'items';
+
+alter table public.coupons
+drop constraint if exists coupons_applies_to_check;
+
+alter table public.coupons
+add constraint coupons_applies_to_check
+check (applies_to in ('items','shipping','order'));
+
 alter table public.products
 drop constraint if exists products_capacity_units_check;
 
@@ -209,9 +224,16 @@ check (
   discount_cents >= 0
   and tax_cents >= 0
   and shipping_cents >= 0
-  and discount_cents <= subtotal_cents
-  and total_cents = subtotal_cents - discount_cents + tax_cents + shipping_cents
+  and discount_cents <= subtotal_cents + shipping_cents
+  and total_cents = subtotal_cents + tax_cents + shipping_cents - discount_cents
 );
+
+alter table public.orders
+drop constraint if exists orders_coupon_applies_to_check;
+
+alter table public.orders
+add constraint orders_coupon_applies_to_check
+check (coupon_applies_to is null or coupon_applies_to in ('items','shipping','order'));
 
 alter table public.orders
 drop constraint if exists orders_fulfillment_method_check;
@@ -336,8 +358,10 @@ drop function if exists public.place_order(uuid,text,text,text,text,text,boolean
 drop function if exists public.place_order(uuid,text,text,text,text,text,boolean,text,jsonb);
 drop function if exists public.place_order(uuid,text,text,text,text,text,boolean,text,text,text,jsonb);
 drop function if exists public.validate_coupon_code(text,integer);
+drop function if exists public.validate_coupon_code(text,integer,text);
 drop function if exists public.calculate_order_totals(integer,integer,text);
 drop function if exists public.calculate_order_totals(integer,text);
+drop function if exists public.calculate_order_totals(integer,integer,text);
 drop function if exists public.get_order_invoice(text);
 drop function if exists public.get_sheet_sync_orders(text);
 drop function if exists public.mark_sheet_invoice_sent(text,text);
@@ -354,15 +378,18 @@ drop function if exists public.admin_update_product_active(uuid,boolean);
 drop function if exists public.admin_update_product_flags(uuid,boolean,boolean);
 drop function if exists public.admin_list_coupons();
 drop function if exists public.admin_save_coupon(text,text,text,text,integer,integer,integer,date,date,integer,boolean);
+drop function if exists public.admin_save_coupon(text,text,text,text,text,integer,integer,integer,date,date,integer,boolean);
 drop function if exists public.admin_remove_coupon(text);
 
 create or replace function public.validate_coupon_code(
   p_coupon_code text,
-  p_subtotal_cents integer
+  p_subtotal_cents integer,
+  p_fulfillment_method text default 'pickup'
 )
 returns table(
   code text,
   description text,
+  applies_to text,
   discount_cents integer,
   final_total_cents integer
 )
@@ -374,11 +401,15 @@ declare
   v_coupon public.coupons%rowtype;
   v_code text;
   v_subtotal integer;
+  v_shipping_cents integer;
+  v_discount_base integer;
   v_used_count integer;
   v_discount integer;
+  v_fulfillment_method text;
 begin
   v_code := upper(trim(coalesce(p_coupon_code, '')));
   v_subtotal := greatest(coalesce(p_subtotal_cents, 0), 0);
+  v_fulfillment_method := lower(trim(coalesce(p_fulfillment_method, 'pickup')));
 
   if v_code = '' then
     raise exception 'Enter a coupon code';
@@ -400,6 +431,31 @@ begin
     raise exception 'Order subtotal does not meet the coupon minimum';
   end if;
 
+  select coalesce(nullif(value, '')::integer, 0)
+  into v_shipping_cents
+  from public.app_settings
+  where key = 'shipping_flat_cents';
+
+  v_shipping_cents := greatest(coalesce(v_shipping_cents, 0), 0);
+
+  if v_fulfillment_method <> 'shipping' then
+    v_shipping_cents := 0;
+  end if;
+
+  if v_coupon.applies_to = 'shipping' and v_shipping_cents <= 0 then
+    raise exception 'Coupon only applies to shipping orders';
+  end if;
+
+  v_discount_base := case v_coupon.applies_to
+    when 'shipping' then v_shipping_cents
+    when 'order' then v_subtotal + v_shipping_cents
+    else v_subtotal
+  end;
+
+  if v_discount_base <= 0 then
+    raise exception 'Coupon cannot be applied to this order';
+  end if;
+
   if v_coupon.max_uses is not null then
     select count(*)::integer
     into v_used_count
@@ -413,24 +469,27 @@ begin
   end if;
 
   if v_coupon.discount_type = 'percent' then
-    v_discount := floor(v_subtotal * v_coupon.percent_off / 100.0)::integer;
+    v_discount := floor(v_discount_base * v_coupon.percent_off / 100.0)::integer;
   else
     v_discount := v_coupon.amount_off_cents;
   end if;
 
-  v_discount := least(v_discount, v_subtotal);
+  v_discount := least(v_discount, v_discount_base);
 
   return query
   select
     v_coupon.code,
     coalesce(v_coupon.description, ''),
+    v_coupon.applies_to,
     v_discount,
-    v_subtotal - v_discount;
+    greatest(v_subtotal + v_shipping_cents - v_discount, 0);
 end;
 $$;
 
 create or replace function public.calculate_order_totals(
-  p_discounted_subtotal_cents integer,
+  p_subtotal_cents integer,
+  p_discount_cents integer,
+  p_coupon_applies_to text,
   p_shipping_method text
 )
 returns table(
@@ -443,12 +502,17 @@ security definer
 set search_path = public
 as $$
 declare
-  v_discounted_subtotal integer;
+  v_subtotal integer;
+  v_discount integer;
+  v_coupon_applies_to text;
+  v_taxable_subtotal integer;
   v_tax_rate_basis_points integer;
   v_shipping_cents integer;
   v_method text;
 begin
-  v_discounted_subtotal := greatest(coalesce(p_discounted_subtotal_cents, 0), 0);
+  v_subtotal := greatest(coalesce(p_subtotal_cents, 0), 0);
+  v_discount := greatest(coalesce(p_discount_cents, 0), 0);
+  v_coupon_applies_to := lower(trim(coalesce(p_coupon_applies_to, 'items')));
   v_method := lower(trim(coalesce(p_shipping_method, 'pickup')));
 
   if v_method not in ('pickup', 'shipping') then
@@ -472,14 +536,21 @@ begin
   end if;
 
   v_shipping_cents := greatest(coalesce(v_shipping_cents, 0), 0);
+  v_discount := least(v_discount, v_subtotal + v_shipping_cents);
+
+  v_taxable_subtotal := case
+    when v_coupon_applies_to in ('items', 'order') then greatest(v_subtotal - least(v_discount, v_subtotal), 0)
+    else v_subtotal
+  end;
 
   return query
   select
-    round(v_discounted_subtotal * v_tax_rate_basis_points / 10000.0)::integer,
+    round(v_taxable_subtotal * v_tax_rate_basis_points / 10000.0)::integer,
     v_shipping_cents,
-    v_discounted_subtotal
-      + round(v_discounted_subtotal * v_tax_rate_basis_points / 10000.0)::integer
-      + v_shipping_cents;
+    v_subtotal
+      + round(v_taxable_subtotal * v_tax_rate_basis_points / 10000.0)::integer
+      + v_shipping_cents
+      - v_discount;
 end;
 $$;
 
@@ -516,6 +587,7 @@ declare
   v_shippable boolean;
   v_coupon record;
   v_coupon_code text;
+  v_coupon_applies_to text;
   v_discount integer;
   v_totals record;
   v_fulfillment_method text;
@@ -625,14 +697,16 @@ begin
   end if;
 
   v_coupon_code := upper(trim(coalesce(p_coupon_code, '')));
+  v_coupon_applies_to := null;
   v_discount := 0;
 
   if v_coupon_code <> '' then
     select *
     into v_coupon
-    from public.validate_coupon_code(v_coupon_code, v_total);
+    from public.validate_coupon_code(v_coupon_code, v_total, v_fulfillment_method);
 
     v_coupon_code := v_coupon.code;
+    v_coupon_applies_to := v_coupon.applies_to;
     v_discount := v_coupon.discount_cents;
   else
     v_coupon_code := null;
@@ -640,7 +714,7 @@ begin
 
   select *
   into v_totals
-  from public.calculate_order_totals(v_total - v_discount, v_fulfillment_method);
+  from public.calculate_order_totals(v_total, v_discount, v_coupon_applies_to, v_fulfillment_method);
 
   insert into orders (
     pickup_date_id,
@@ -651,6 +725,7 @@ begin
     payment_method,
     invoice_requested,
     coupon_code,
+    coupon_applies_to,
     subtotal_cents,
     discount_cents,
     tax_cents,
@@ -669,6 +744,7 @@ begin
     p_payment_method,
     coalesce(p_invoice_requested, false),
     v_coupon_code,
+    v_coupon_applies_to,
     v_total,
     v_discount,
     v_totals.tax_cents,
@@ -753,6 +829,7 @@ returns table(
   payment_method text,
   invoice_requested boolean,
   coupon_code text,
+  coupon_applies_to text,
   subtotal_cents integer,
   discount_cents integer,
   tax_cents integer,
@@ -780,6 +857,7 @@ begin
     o.payment_method,
     o.invoice_requested,
     o.coupon_code,
+    o.coupon_applies_to,
     o.subtotal_cents,
     o.discount_cents,
     o.tax_cents,
@@ -829,6 +907,7 @@ returns table(
   invoice_requested boolean,
   invoice_sent boolean,
   coupon_code text,
+  coupon_applies_to text,
   subtotal_cents integer,
   discount_cents integer,
   tax_cents integer,
@@ -868,6 +947,7 @@ begin
     o.invoice_requested,
     o.invoice_sent,
     o.coupon_code,
+    o.coupon_applies_to,
     o.subtotal_cents,
     o.discount_cents,
     o.tax_cents,
@@ -957,6 +1037,7 @@ returns table(
   invoice_requested boolean,
   invoice_sent boolean,
   coupon_code text,
+  coupon_applies_to text,
   subtotal_cents integer,
   discount_cents integer,
   tax_cents integer,
@@ -993,6 +1074,7 @@ begin
     o.invoice_requested,
     o.invoice_sent,
     o.coupon_code,
+    o.coupon_applies_to,
     o.subtotal_cents,
     o.discount_cents,
     o.tax_cents,
@@ -1257,6 +1339,7 @@ create or replace function public.admin_list_coupons()
 returns table(
   code text,
   description text,
+  applies_to text,
   discount_type text,
   percent_off integer,
   amount_off_cents integer,
@@ -1281,6 +1364,7 @@ begin
   select
     c.code,
     c.description,
+    c.applies_to,
     c.discount_type,
     c.percent_off,
     c.amount_off_cents,
@@ -1303,6 +1387,7 @@ create or replace function public.admin_save_coupon(
   p_original_code text,
   p_code text,
   p_description text,
+  p_applies_to text,
   p_discount_type text,
   p_percent_off integer,
   p_amount_off_cents integer,
@@ -1320,6 +1405,7 @@ as $$
 declare
   v_original_code text;
   v_code text;
+  v_applies_to text;
   v_discount_type text;
   v_used_count integer;
 begin
@@ -1329,6 +1415,7 @@ begin
 
   v_original_code := nullif(upper(trim(coalesce(p_original_code, ''))), '');
   v_code := upper(trim(coalesce(p_code, '')));
+  v_applies_to := lower(trim(coalesce(p_applies_to, 'items')));
   v_discount_type := lower(trim(coalesce(p_discount_type, '')));
 
   if v_code = '' then
@@ -1341,6 +1428,10 @@ begin
 
   if v_discount_type not in ('percent', 'amount') then
     raise exception 'Discount type must be percent or amount';
+  end if;
+
+  if v_applies_to not in ('items', 'shipping', 'order') then
+    raise exception 'Coupon must apply to items, shipping, or whole order';
   end if;
 
   if v_discount_type = 'percent' and coalesce(p_percent_off, 0) not between 1 and 100 then
@@ -1376,6 +1467,7 @@ begin
   insert into public.coupons (
     code,
     description,
+    applies_to,
     discount_type,
     percent_off,
     amount_off_cents,
@@ -1388,6 +1480,7 @@ begin
   values (
     v_code,
     nullif(trim(coalesce(p_description, '')), ''),
+    v_applies_to,
     v_discount_type,
     case when v_discount_type = 'percent' then p_percent_off else null end,
     case when v_discount_type = 'amount' then p_amount_off_cents else null end,
@@ -1400,6 +1493,7 @@ begin
   on conflict (code)
   do update set
     description = excluded.description,
+    applies_to = excluded.applies_to,
     discount_type = excluded.discount_type,
     percent_off = excluded.percent_off,
     amount_off_cents = excluded.amount_off_cents,
@@ -1466,11 +1560,11 @@ $$;
 revoke all on function public.place_order(uuid,text,text,text,text,text,boolean,text,text,text,jsonb) from public;
 grant execute on function public.place_order(uuid,text,text,text,text,text,boolean,text,text,text,jsonb) to anon, authenticated;
 
-revoke all on function public.validate_coupon_code(text,integer) from public;
-grant execute on function public.validate_coupon_code(text,integer) to anon, authenticated;
+revoke all on function public.validate_coupon_code(text,integer,text) from public;
+grant execute on function public.validate_coupon_code(text,integer,text) to anon, authenticated;
 
-revoke all on function public.calculate_order_totals(integer,text) from public;
-grant execute on function public.calculate_order_totals(integer,text) to anon, authenticated;
+revoke all on function public.calculate_order_totals(integer,integer,text,text) from public;
+grant execute on function public.calculate_order_totals(integer,integer,text,text) to anon, authenticated;
 
 revoke all on function public.get_order_invoice(text) from public;
 grant execute on function public.get_order_invoice(text) to anon, authenticated;
@@ -1508,8 +1602,8 @@ grant execute on function public.admin_update_product_flags(uuid,boolean,boolean
 revoke all on function public.admin_list_coupons() from public;
 grant execute on function public.admin_list_coupons() to authenticated;
 
-revoke all on function public.admin_save_coupon(text,text,text,text,integer,integer,integer,date,date,integer,boolean) from public;
-grant execute on function public.admin_save_coupon(text,text,text,text,integer,integer,integer,date,date,integer,boolean) to authenticated;
+revoke all on function public.admin_save_coupon(text,text,text,text,text,integer,integer,integer,date,date,integer,boolean) from public;
+grant execute on function public.admin_save_coupon(text,text,text,text,text,integer,integer,integer,date,date,integer,boolean) to authenticated;
 
 revoke all on function public.admin_remove_coupon(text) from public;
 grant execute on function public.admin_remove_coupon(text) to authenticated;

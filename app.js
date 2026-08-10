@@ -238,6 +238,14 @@ function discountedSubtotalCents() {
   return Math.max(selectedTotalCents() - discountCents(), 0);
 }
 
+function couponAppliesToLabel(value) {
+  return {
+    items: "items",
+    shipping: "shipping",
+    order: "whole order"
+  }[value] || "order";
+}
+
 function categoryFor(product) {
   return product.category || "Everyday";
 }
@@ -471,6 +479,10 @@ function updateShippingFields() {
   const isShipping = shippingIsSelected();
   const nonShippableItems = selectedNonShippableItems();
 
+  if (state.coupon) {
+    resetCoupon("Coupon removed because the checkout option changed. Apply it again before checkout.");
+  }
+
   el.shippingAddressField.hidden = !isShipping;
   shippingAddressFields().forEach(field => {
     field.required = isShipping;
@@ -494,7 +506,9 @@ function updateShippingFields() {
 
 async function calculateOrderTotals() {
   const { data, error } = await supabaseClient.rpc("calculate_order_totals", {
-    p_discounted_subtotal_cents: discountedSubtotalCents(),
+    p_subtotal_cents: selectedTotalCents(),
+    p_discount_cents: discountCents(),
+    p_coupon_applies_to: state.coupon?.applies_to || null,
     p_shipping_method: fulfillmentMethod()
   });
 
@@ -527,7 +541,8 @@ async function applyCouponCode() {
 
   const { data, error } = await supabaseClient.rpc("validate_coupon_code", {
     p_coupon_code: code,
-    p_subtotal_cents: subtotal
+    p_subtotal_cents: subtotal,
+    p_fulfillment_method: fulfillmentMethod()
   });
 
   el.applyCoupon.disabled = false;
@@ -544,7 +559,10 @@ async function applyCouponCode() {
   state.orderTotals = null;
   el.couponCode.value = coupon.code;
   el.removeCoupon.hidden = false;
-  setCouponMessage(`Coupon applied: ${money(coupon.discount_cents)} off.`, "success");
+  setCouponMessage(
+    `Coupon applied: ${money(coupon.discount_cents)} off ${couponAppliesToLabel(coupon.applies_to)}.`,
+    "success"
+  );
   updateSummary();
   return true;
 }
@@ -851,7 +869,7 @@ function updateSummary() {
 
   el.selectedCount.textContent = count;
   el.orderTotal.textContent = state.coupon
-    ? `${money(discountedSubtotalCents())} after coupon`
+    ? `${money(selectedTotalCents())} before tax/shipping, coupon applied`
     : money(selectedTotalCents());
 }
 
@@ -1023,7 +1041,7 @@ async function showReview() {
         <div><span>Subtotal</span><span>${money(selectedTotalCents())}</span></div>
         ${state.coupon ? `
           <div class="discount-line">
-            <span>Coupon ${state.coupon.code}</span>
+            <span>Coupon ${state.coupon.code} (${couponAppliesToLabel(state.coupon.applies_to)})</span>
             <span>-${money(discountCents())}</span>
           </div>
         ` : ""}
@@ -1173,7 +1191,7 @@ function showSuccess(result, paymentMethod, invoiceRequested, items, details, co
       <div><dt>${details.fulfillmentMethod === "shipping" ? "Ship date" : "Pickup"}</dt><dd>${prettyDate(state.selectedDate.pickup_date)}</dd></div>
       <div><dt>Order code</dt><dd>${result.order_code}</dd></div>
       <div><dt>Total</dt><dd>${money(result.total_cents)}</dd></div>
-      ${coupon ? `<div><dt>Coupon</dt><dd>${coupon.code} (-${money(coupon.discount_cents)})</dd></div>` : ""}
+      ${coupon ? `<div><dt>Coupon</dt><dd>${coupon.code} (${couponAppliesToLabel(coupon.applies_to)}) -${money(coupon.discount_cents)}</dd></div>` : ""}
       <div><dt>Payment</dt><dd data-payment-label></dd></div>
       <div><dt>Method</dt><dd>${fulfillmentLabel(details.fulfillmentMethod)}</dd></div>
       <div><dt>Receipt email</dt><dd>${invoiceRequested ? "Requested" : "Not requested"}</dd></div>
@@ -1225,7 +1243,7 @@ function showSuccess(result, paymentMethod, invoiceRequested, items, details, co
     <div class="summary">
       <div class="total-lines">
         <div><span>Subtotal</span><span>${money(selectedTotalCents())}</span></div>
-        ${coupon ? `<div class="discount-line"><span>Coupon ${coupon.code}</span><span>-${money(coupon.discount_cents)}</span></div>` : ""}
+        ${coupon ? `<div class="discount-line"><span>Coupon ${coupon.code} (${couponAppliesToLabel(coupon.applies_to)})</span><span>-${money(coupon.discount_cents)}</span></div>` : ""}
         <div><span>Tax</span><span>${money(totals?.tax_cents || 0)}</span></div>
         ${totals?.shipping_cents ? `<div><span>Shipping</span><span>${money(totals.shipping_cents)}</span></div>` : ""}
         <div><strong>Total</strong><strong>${money(result.total_cents)}</strong></div>
