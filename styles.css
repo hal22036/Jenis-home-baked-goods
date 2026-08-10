@@ -503,6 +503,21 @@ legend {
   background: var(--surface-soft);
 }
 
+.shipping-address-grid {
+  display: grid;
+  grid-template-columns: 1fr minmax(90px, 0.35fr) minmax(120px, 0.45fr);
+  gap: 14px;
+  margin: 0 0 18px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fffdf9;
+}
+
+.shipping-street-field {
+  grid-column: 1 / -1;
+}
+
 .coupon-actions {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -883,6 +898,14 @@ button[type="submit"]:disabled {
 
   .fulfillment-grid {
     grid-template-columns: 1fr;
+  }
+
+  .shipping-address-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .shipping-street-field {
+    grid-column: auto;
   }
 
   .category-grid {

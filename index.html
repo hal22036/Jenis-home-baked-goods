@@ -9,7 +9,7 @@
   />
   <title>Bakery Bread Orders</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
-  <link rel="stylesheet" href="styles.css?v=20260810-checkout-cards" />
+  <link rel="stylesheet" href="styles.css?v=20260810-shipping-address-fields" />
 </head>
 <body>
   <header class="site-header">
@@ -112,14 +112,24 @@
           <p id="shipping-message" class="hint" role="status"></p>
         </fieldset>
 
-        <label id="shipping-address-field" hidden>
-          Shipping address
-          <textarea
-            id="shipping-address"
-            rows="3"
-            placeholder="Street address, city, state, ZIP"
-          ></textarea>
-        </label>
+        <div id="shipping-address-field" class="shipping-address-grid" hidden>
+          <label class="shipping-street-field">
+            Street address
+            <input id="shipping-street" autocomplete="shipping street-address" placeholder="7140 Anchor Terrace St." />
+          </label>
+          <label>
+            City
+            <input id="shipping-city" autocomplete="shipping address-level2" placeholder="Las Vegas" />
+          </label>
+          <label>
+            State
+            <input id="shipping-state" autocomplete="shipping address-level1" maxlength="2" placeholder="NV" />
+          </label>
+          <label>
+            ZIP
+            <input id="shipping-zip" autocomplete="shipping postal-code" inputmode="numeric" placeholder="00000" />
+          </label>
+        </div>
 
         <div class="coupon-box">
           <label>
@@ -180,6 +190,6 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20260810-checkout-cards"></script>
+  <script src="app.js?v=20260810-shipping-address-fields"></script>
 </body>
 </html>

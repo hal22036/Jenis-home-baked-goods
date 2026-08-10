@@ -88,7 +88,10 @@ const el = {
   formMessage: document.querySelector("#form-message"),
   customerPhone: document.querySelector("#customer-phone"),
   shippingAddressField: document.querySelector("#shipping-address-field"),
-  shippingAddress: document.querySelector("#shipping-address"),
+  shippingStreet: document.querySelector("#shipping-street"),
+  shippingCity: document.querySelector("#shipping-city"),
+  shippingState: document.querySelector("#shipping-state"),
+  shippingZip: document.querySelector("#shipping-zip"),
   shippingMessage: document.querySelector("#shipping-message"),
   couponCode: document.querySelector("#coupon-code"),
   couponMessage: document.querySelector("#coupon-message"),
@@ -447,15 +450,36 @@ function fulfillmentLabel(value = fulfillmentMethod()) {
   return value === "shipping" ? "Shipping" : "Pickup";
 }
 
+function shippingAddressFields() {
+  return [el.shippingStreet, el.shippingCity, el.shippingState, el.shippingZip];
+}
+
+function shippingAddress() {
+  const street = cleanText(el.shippingStreet.value);
+  const city = cleanText(el.shippingCity.value);
+  const stateValue = cleanText(el.shippingState.value).toUpperCase();
+  const zip = cleanText(el.shippingZip.value);
+
+  return [street, [city, stateValue, zip].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+}
+
+function firstMissingShippingField() {
+  return shippingAddressFields().find(field => !cleanText(field.value));
+}
+
 function updateShippingFields() {
   const isShipping = shippingIsSelected();
   const nonShippableItems = selectedNonShippableItems();
 
   el.shippingAddressField.hidden = !isShipping;
-  el.shippingAddress.required = isShipping;
+  shippingAddressFields().forEach(field => {
+    field.required = isShipping;
+  });
 
   if (!isShipping) {
-    el.shippingAddress.value = "";
+    shippingAddressFields().forEach(field => {
+      field.value = "";
+    });
     el.shippingMessage.textContent = "Pickup orders are available on your selected Friday.";
   } else if (nonShippableItems.length) {
     el.shippingMessage.textContent =
@@ -887,9 +911,10 @@ el.form.addEventListener("submit", async event => {
       return;
     }
 
-    if (!cleanText(el.shippingAddress.value)) {
-      setMessage("Please enter a shipping address.", "error");
-      el.shippingAddress.focus();
+    const missingShippingField = firstMissingShippingField();
+    if (missingShippingField) {
+      setMessage("Please complete the shipping address.", "error");
+      missingShippingField.focus();
       return;
     }
   }
@@ -931,7 +956,7 @@ function customerDetails() {
     notes: document.querySelector("#customer-notes").value.trim(),
     paymentMethod: document.querySelector('input[name="payment"]:checked')?.value,
     fulfillmentMethod: fulfillmentMethod(),
-    shippingAddress: cleanText(el.shippingAddress.value)
+    shippingAddress: shippingAddress()
   };
 }
 
