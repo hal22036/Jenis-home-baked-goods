@@ -10,6 +10,49 @@
   padding-bottom: 32px;
 }
 
+.admin-page-nav {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 253, 249, 0.96);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(8px);
+}
+
+.admin-page-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-page-links a {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--accent-dark);
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.admin-page-links a.is-active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
 .admin-toolbar {
   display: flex;
   align-items: center;
@@ -276,6 +319,16 @@
 }
 
 @media (max-width: 760px) {
+  .admin-page-nav {
+    position: static;
+    display: grid;
+  }
+
+  .admin-page-links {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .admin-toolbar,
   .pickup-date-row,
   .admin-product-row,

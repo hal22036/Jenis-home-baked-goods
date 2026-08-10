@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bakery Admin | Jeni's Home Baked Goods</title>
-  <link rel="stylesheet" href="styles.css?v=20260810-shipping-coupons" />
-  <link rel="stylesheet" href="admin.css?v=20260810-shipping-coupons" />
+  <link rel="stylesheet" href="styles.css?v=20260810-admin-pages" />
+  <link rel="stylesheet" href="admin.css?v=20260810-admin-pages" />
 </head>
 <body>
   <header class="site-header admin-header">
@@ -33,6 +33,16 @@
       </form>
     </section>
 
+    <nav class="admin-page-nav" id="admin-page-nav" aria-label="Admin pages" hidden>
+      <div class="admin-page-links">
+        <a href="#orders" data-admin-page-link="orders">Orders</a>
+        <a href="#dates" data-admin-page-link="dates">Order dates</a>
+        <a href="#products" data-admin-page-link="products">Products</a>
+        <a href="#coupons" data-admin-page-link="coupons">Coupons</a>
+      </div>
+      <button class="secondary-button compact-button" type="button" id="admin-sign-out">Sign out</button>
+    </nav>
+
     <section class="panel" id="admin-panel" hidden>
       <div class="admin-toolbar">
         <div>
@@ -45,7 +55,6 @@
             Show archived
           </label>
           <button class="secondary-button compact-button" type="button" id="refresh-orders">Refresh</button>
-          <button class="secondary-button compact-button" type="button" id="admin-sign-out">Sign out</button>
         </div>
       </div>
       <div class="order-filters" aria-label="Order filters">
@@ -186,6 +195,6 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="admin.js?v=20260810-shipping-coupons"></script>
+  <script src="admin.js?v=20260810-admin-pages"></script>
 </body>
 </html>

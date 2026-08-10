@@ -12,6 +12,7 @@ const state = {
 
 const el = {
   loginPanel: document.querySelector("#login-panel"),
+  adminPageNav: document.querySelector("#admin-page-nav"),
   adminPanel: document.querySelector("#admin-panel"),
   datesPanel: document.querySelector("#dates-panel"),
   productsPanel: document.querySelector("#products-panel"),
@@ -58,6 +59,13 @@ const el = {
   clearCouponForm: document.querySelector("#clear-coupon-form")
 };
 
+const adminPages = {
+  orders: el.adminPanel,
+  dates: el.datesPanel,
+  products: el.productsPanel,
+  coupons: el.couponsPanel
+};
+
 function money(cents) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -102,6 +110,7 @@ async function boot() {
 
 function showLogin() {
   el.loginPanel.hidden = false;
+  el.adminPageNav.hidden = true;
   el.adminPanel.hidden = true;
   el.datesPanel.hidden = true;
   el.productsPanel.hidden = true;
@@ -110,11 +119,28 @@ function showLogin() {
 
 async function showAdmin() {
   el.loginPanel.hidden = true;
-  el.adminPanel.hidden = false;
-  el.datesPanel.hidden = false;
-  el.productsPanel.hidden = false;
-  el.couponsPanel.hidden = false;
+  el.adminPageNav.hidden = false;
   await Promise.all([loadOrders(), loadPickupDates(), loadProducts(), loadCoupons()]);
+  showAdminPage(currentAdminPage());
+}
+
+function currentAdminPage() {
+  const page = window.location.hash.replace("#", "");
+  return adminPages[page] ? page : "orders";
+}
+
+function showAdminPage(page) {
+  const activePage = adminPages[page] ? page : "orders";
+
+  Object.entries(adminPages).forEach(([name, panel]) => {
+    panel.hidden = name !== activePage;
+  });
+
+  document.querySelectorAll("[data-admin-page-link]").forEach(link => {
+    const isActive = link.dataset.adminPageLink === activePage;
+    link.classList.toggle("is-active", isActive);
+    link.setAttribute("aria-current", isActive ? "page" : "false");
+  });
 }
 
 el.loginForm.addEventListener("submit", async event => {
@@ -138,6 +164,13 @@ el.loginForm.addEventListener("submit", async event => {
 el.signOut.addEventListener("click", async () => {
   await supabaseClient.auth.signOut();
   showLogin();
+});
+
+window.addEventListener("hashchange", () => {
+  if (!el.adminPageNav.hidden) {
+    showAdminPage(currentAdminPage());
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 });
 
 el.refreshOrders.addEventListener("click", () => {
