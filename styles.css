@@ -514,6 +514,10 @@ legend {
   background: #fffdf9;
 }
 
+.shipping-address-grid[hidden] {
+  display: none;
+}
+
 .shipping-street-field {
   grid-column: 1 / -1;
 }
