@@ -66,6 +66,7 @@ const state = {
   products: [],
   selectedDate: null,
   quantities: {},
+  coupon: null,
   lastOrder: null,
   isSubmitting: false
 };
@@ -85,6 +86,10 @@ const el = {
   form: document.querySelector("#order-form"),
   formMessage: document.querySelector("#form-message"),
   customerPhone: document.querySelector("#customer-phone"),
+  couponCode: document.querySelector("#coupon-code"),
+  couponMessage: document.querySelector("#coupon-message"),
+  applyCoupon: document.querySelector("#apply-coupon"),
+  removeCoupon: document.querySelector("#remove-coupon"),
   submit: document.querySelector("#submit-order"),
   reviewSection: document.querySelector("#review-section"),
   reviewContent: document.querySelector("#review-content"),
@@ -211,6 +216,14 @@ function selectedTotalCents() {
   return state.products.reduce((sum, product) => {
     return sum + (state.quantities[product.id] || 0) * product.price_cents;
   }, 0);
+}
+
+function discountCents() {
+  return state.coupon?.discount_cents || 0;
+}
+
+function finalTotalCents() {
+  return Math.max(selectedTotalCents() - discountCents(), 0);
 }
 
 function categoryFor(product) {
@@ -386,6 +399,60 @@ function setReviewMessage(message = "", type = "") {
   el.reviewMessage.className = type ? `message ${type}` : "message";
 }
 
+function setCouponMessage(message = "", type = "") {
+  el.couponMessage.textContent = message;
+  el.couponMessage.className = type ? `message ${type}` : "message";
+}
+
+function resetCoupon(message = "") {
+  state.coupon = null;
+  el.removeCoupon.hidden = true;
+  if (message) setCouponMessage(message, "error");
+}
+
+async function applyCouponCode() {
+  const code = cleanText(el.couponCode.value).toUpperCase();
+  const subtotal = selectedTotalCents();
+
+  if (!code) {
+    resetCoupon();
+    setCouponMessage("Enter a coupon code first.", "error");
+    el.couponCode.focus();
+    return false;
+  }
+
+  if (subtotal <= 0) {
+    resetCoupon();
+    setCouponMessage("Add items before applying a coupon.", "error");
+    return false;
+  }
+
+  el.applyCoupon.disabled = true;
+  setCouponMessage("Checking coupon...");
+
+  const { data, error } = await supabaseClient.rpc("validate_coupon_code", {
+    p_coupon_code: code,
+    p_subtotal_cents: subtotal
+  });
+
+  el.applyCoupon.disabled = false;
+
+  if (error) {
+    resetCoupon();
+    setCouponMessage(error.message || "Coupon code is not valid.", "error");
+    updateSummary();
+    return false;
+  }
+
+  const coupon = Array.isArray(data) ? data[0] : data;
+  state.coupon = coupon;
+  el.couponCode.value = coupon.code;
+  el.removeCoupon.hidden = false;
+  setCouponMessage(`Coupon applied: ${money(coupon.discount_cents)} off.`, "success");
+  updateSummary();
+  return true;
+}
+
 function applyStoreSettings() {
   document.title = `${STORE_SETTINGS.bakeryName} | Bread Orders`;
   el.intro.textContent = STORE_SETTINGS.intro;
@@ -471,6 +538,8 @@ function renderDates() {
 function selectDate(dateId) {
   state.selectedDate = state.dates.find(d => d.id === dateId);
   state.quantities = {};
+  resetCoupon();
+  el.couponCode.value = "";
 
   el.dateSection.hidden = false;
   el.intro.hidden = false;
@@ -633,6 +702,10 @@ function isQuantityButtonDisabled(action, product) {
 }
 
 function updateProductQuantity(action, product) {
+  if (state.coupon) {
+    resetCoupon("Coupon removed because the order changed. Apply it again before checkout.");
+  }
+
   if (action === "minus") {
     if (state.quantities[product.id] > 0) {
       state.quantities[product.id]--;
@@ -670,13 +743,22 @@ function updateSummary() {
     `${remaining} of ${state.selectedDate.capacity} loaf spots are currently available for ${prettyDate(state.selectedDate.pickup_date)}.`;
 
   el.selectedCount.textContent = count;
-  el.orderTotal.textContent = money(selectedTotalCents());
+  el.orderTotal.textContent = state.coupon
+    ? `${money(finalTotalCents())} after coupon`
+    : money(selectedTotalCents());
 }
 
 el.customerPhone.addEventListener("input", syncPhoneFormat);
 el.customerPhone.addEventListener("blur", syncPhoneFormat);
+el.applyCoupon.addEventListener("click", applyCouponCode);
+el.removeCoupon.addEventListener("click", () => {
+  resetCoupon();
+  el.couponCode.value = "";
+  setCouponMessage("Coupon removed.");
+  updateSummary();
+});
 
-el.form.addEventListener("submit", event => {
+el.form.addEventListener("submit", async event => {
   event.preventDefault();
 
   if (state.isSubmitting) return;
@@ -706,6 +788,12 @@ el.form.addEventListener("submit", event => {
   if (!paymentMethod) {
     setMessage("Please choose a payment option.", "error");
     return;
+  }
+
+  const typedCoupon = cleanText(el.couponCode.value).toUpperCase();
+  if (typedCoupon && state.coupon?.code !== typedCoupon) {
+    const applied = await applyCouponCode();
+    if (!applied) return;
   }
 
   showReview();
@@ -789,8 +877,16 @@ function showReview() {
     </div>
     ${details.notes ? `<p class="admin-notes"><strong>Questions/comments:</strong> ${details.notes}</p>` : ""}
     <div class="summary">
-      <strong>Total</strong>
-      <strong>${money(selectedTotalCents())}</strong>
+      <div class="total-lines">
+        <div><span>Subtotal</span><span>${money(selectedTotalCents())}</span></div>
+        ${state.coupon ? `
+          <div class="discount-line">
+            <span>Coupon ${state.coupon.code}</span>
+            <span>-${money(discountCents())}</span>
+          </div>
+        ` : ""}
+        <div><strong>Total</strong><strong>${money(finalTotalCents())}</strong></div>
+      </div>
     </div>
   `;
 
@@ -853,6 +949,7 @@ async function submitReviewedOrder() {
     p_notes: details.notes,
     p_payment_method: details.paymentMethod,
     p_invoice_requested: invoiceRequested,
+    p_coupon_code: state.coupon?.code || null,
     p_items: items
   });
 
@@ -872,7 +969,7 @@ async function submitReviewedOrder() {
   }
 
   const result = Array.isArray(data) ? data[0] : data;
-  showSuccess(result, details.paymentMethod, invoiceRequested, selectedItemsWithDetails(), details);
+  showSuccess(result, details.paymentMethod, invoiceRequested, selectedItemsWithDetails(), details, state.coupon);
   await refreshSelectedDate();
 }
 
@@ -895,7 +992,7 @@ async function refreshSelectedDate() {
   }
 }
 
-function showSuccess(result, paymentMethod, invoiceRequested, items, details) {
+function showSuccess(result, paymentMethod, invoiceRequested, items, details, coupon) {
   const payment = STORE_SETTINGS.paymentOptions[paymentMethod];
   const linkIsUsable = /^https?:\/\//.test(payment?.link || "");
   const paymentAction = linkIsUsable
@@ -919,6 +1016,7 @@ function showSuccess(result, paymentMethod, invoiceRequested, items, details) {
       <div><dt>Pickup</dt><dd>${prettyDate(state.selectedDate.pickup_date)}</dd></div>
       <div><dt>Order code</dt><dd>${result.order_code}</dd></div>
       <div><dt>Total</dt><dd>${money(result.total_cents)}</dd></div>
+      ${coupon ? `<div><dt>Coupon</dt><dd>${coupon.code} (-${money(coupon.discount_cents)})</dd></div>` : ""}
       <div><dt>Payment</dt><dd data-payment-label></dd></div>
       <div><dt>Receipt email</dt><dd>${invoiceRequested ? "Requested" : "Not requested"}</dd></div>
       ${invoiceRequested ? `<div><dt>Email</dt><dd>${details.email}</dd></div>` : ""}
@@ -963,6 +1061,15 @@ function showSuccess(result, paymentMethod, invoiceRequested, items, details) {
       `).join("")}
     </div>
     ${details.notes ? `<p class="admin-notes"><strong>Questions/comments:</strong> ${details.notes}</p>` : ""}
+    ${coupon ? `
+      <div class="summary">
+        <div class="total-lines">
+          <div><span>Subtotal</span><span>${money(selectedTotalCents())}</span></div>
+          <div class="discount-line"><span>Coupon ${coupon.code}</span><span>-${money(coupon.discount_cents)}</span></div>
+          <div><strong>Total</strong><strong>${money(result.total_cents)}</strong></div>
+        </div>
+      </div>
+    ` : ""}
     <div class="pickup-details">
       <h3>Pickup details</h3>
       <p>
@@ -993,6 +1100,8 @@ function showSuccess(result, paymentMethod, invoiceRequested, items, details) {
   el.form.reset();
   el.invoiceRequested.checked = false;
   updateInvoiceEmailField();
+  resetCoupon();
+  el.couponCode.value = "";
   state.quantities = {};
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -1001,6 +1110,8 @@ async function startAnotherOrder() {
   state.lastOrder = null;
   state.selectedDate = null;
   state.quantities = {};
+  resetCoupon();
+  el.couponCode.value = "";
 
   el.successSection.hidden = true;
   el.dateSection.hidden = false;

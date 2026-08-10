@@ -16,7 +16,7 @@
     <div class="wrap header-layout">
       <div>
         <img class="site-logo" src="assets/logo.png" alt="Jeni's Home Baked Goods logo" />
-        <p class="eyebrow">Jeni's Home Made Goods</p>
+        <p class="eyebrow">Fresh bread pickup orders</p>
         <p data-store-intro>
           Choose a future pickup date, build your bread order, and submit.
         </p>
@@ -91,6 +91,18 @@
           ></textarea>
         </label>
 
+        <div class="coupon-box">
+          <label>
+            Coupon code
+            <input id="coupon-code" autocomplete="off" autocapitalize="characters" placeholder="Optional" />
+          </label>
+          <div class="coupon-actions">
+            <button class="secondary-button compact-button" type="button" id="apply-coupon">Apply coupon</button>
+            <button class="secondary-button compact-button" type="button" id="remove-coupon" hidden>Remove</button>
+          </div>
+          <p id="coupon-message" class="message" role="status"></p>
+        </div>
+
         <fieldset>
           <legend>Payment method</legend>
           <div id="payment-choices" class="payment-grid"></div>
@@ -138,6 +150,6 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20260808-home-made"></script>
+  <script src="app.js?v=20260810-coupons"></script>
 </body>
 </html>

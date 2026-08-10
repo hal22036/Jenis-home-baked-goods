@@ -105,8 +105,16 @@ function renderInvoice(order) {
     ${order.notes ? `<p class="admin-notes"><strong>Questions/comments:</strong> ${escapeHtml(order.notes)}</p>` : ""}
 
     <div class="summary">
-      <strong>Total</strong>
-      <strong>${money(order.total_cents)}</strong>
+      <div class="total-lines">
+        <div><span>Subtotal</span><span>${money(order.subtotal_cents || order.total_cents)}</span></div>
+        ${order.discount_cents ? `
+          <div class="discount-line">
+            <span>Coupon ${escapeHtml(order.coupon_code || "")}</span>
+            <span>-${money(order.discount_cents)}</span>
+          </div>
+        ` : ""}
+        <div><strong>Total</strong><strong>${money(order.total_cents)}</strong></div>
+      </div>
     </div>
 
     <div class="pickup-details">

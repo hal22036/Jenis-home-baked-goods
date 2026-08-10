@@ -342,6 +342,23 @@ h2 {
   font-size: 1.15rem;
 }
 
+.total-lines {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.total-lines div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.discount-line {
+  color: var(--success);
+  font-weight: 800;
+}
+
 .field-grid {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
@@ -408,6 +425,24 @@ legend {
   margin: 12px 0 0;
   color: var(--muted);
   font-size: 0.94rem;
+}
+
+.coupon-box {
+  margin: 12px 0 18px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.coupon-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.coupon-actions .compact-button {
+  margin-bottom: 0;
 }
 
 .pickup-note {

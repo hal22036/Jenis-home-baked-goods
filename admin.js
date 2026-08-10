@@ -246,6 +246,7 @@ function orderCardMarkup(order) {
         <div><dt>Payment</dt><dd>${paymentLabel(order.payment_method)}</dd></div>
         <div><dt>Receipt email</dt><dd>${invoiceStatusLabel(order)}</dd></div>
         <div><dt>Loaf spots</dt><dd>${order.total_loaves}</dd></div>
+        ${order.discount_cents ? `<div><dt>Coupon</dt><dd>${order.coupon_code} (-${money(order.discount_cents)})</dd></div>` : ""}
       </dl>
 
       <div class="admin-items">

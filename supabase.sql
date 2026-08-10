@@ -23,6 +23,25 @@ create table if not exists public.pickup_dates (
   is_open boolean not null default true
 );
 
+create table if not exists public.coupons (
+  code text primary key,
+  description text,
+  discount_type text not null check (discount_type in ('percent','amount')),
+  percent_off integer check (percent_off between 1 and 100),
+  amount_off_cents integer check (amount_off_cents > 0),
+  minimum_subtotal_cents integer not null default 0 check (minimum_subtotal_cents >= 0),
+  starts_on date,
+  ends_on date,
+  max_uses integer check (max_uses > 0),
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  constraint coupons_discount_value_check check (
+    (discount_type = 'percent' and percent_off is not null and amount_off_cents is null)
+    or
+    (discount_type = 'amount' and amount_off_cents is not null and percent_off is null)
+  )
+);
+
 create table if not exists public.orders (
   id uuid primary key default gen_random_uuid(),
   order_code text not null unique default upper(substr(encode(gen_random_bytes(6), 'hex'), 1, 8)),
@@ -32,6 +51,9 @@ create table if not exists public.orders (
   customer_phone text not null,
   notes text,
   payment_method text not null check (payment_method in ('Venmo','Zelle','PayPal','CashApp','CashAtPickup')),
+  subtotal_cents integer not null default 0,
+  discount_cents integer not null default 0 check (discount_cents >= 0),
+  coupon_code text references public.coupons(code),
   total_cents integer not null default 0,
   total_loaves integer not null check (total_loaves >= 0),
   invoice_requested boolean not null default false,
@@ -51,6 +73,15 @@ create table if not exists public.admin_users (
   email text primary key,
   created_at timestamptz not null default now()
 );
+
+create table if not exists public.app_settings (
+  key text primary key,
+  value text not null
+);
+
+insert into public.app_settings (key, value)
+values ('google_sheet_sync_token', 'REPLACE_WITH_YOUR_GOOGLE_SHEET_SYNC_TOKEN')
+on conflict (key) do nothing;
 
 create index if not exists idx_pickup_dates_open_future
 on public.pickup_dates (pickup_date)
@@ -76,6 +107,26 @@ add column if not exists invoice_requested boolean not null default false;
 
 alter table public.orders
 add column if not exists invoice_sent boolean not null default false;
+
+alter table public.orders
+add column if not exists subtotal_cents integer not null default 0;
+
+alter table public.orders
+add column if not exists discount_cents integer not null default 0;
+
+alter table public.orders
+add column if not exists coupon_code text;
+
+alter table public.orders
+drop constraint if exists orders_coupon_code_fkey;
+
+alter table public.orders
+add constraint orders_coupon_code_fkey
+foreign key (coupon_code) references public.coupons(code);
+
+update public.orders
+set subtotal_cents = total_cents
+where subtotal_cents = 0 and total_cents > 0;
 
 alter table public.orders
 alter column customer_email drop not null;
@@ -122,6 +173,13 @@ drop constraint if exists orders_total_loaves_check;
 alter table public.orders
 add constraint orders_total_loaves_check
 check (total_loaves >= 0);
+
+alter table public.orders
+drop constraint if exists orders_discount_cents_check;
+
+alter table public.orders
+add constraint orders_discount_cents_check
+check (discount_cents >= 0 and discount_cents <= subtotal_cents and total_cents = subtotal_cents - discount_cents);
 
 alter table public.orders
 drop constraint if exists orders_payment_method_check;
@@ -197,6 +255,8 @@ alter table public.pickup_dates enable row level security;
 alter table public.orders enable row level security;
 alter table public.order_items enable row level security;
 alter table public.admin_users enable row level security;
+alter table public.app_settings enable row level security;
+alter table public.coupons enable row level security;
 
 drop policy if exists "Anyone can read active products" on public.products;
 create policy "Anyone can read active products"
@@ -234,7 +294,11 @@ using (public.is_admin());
 
 drop function if exists public.place_order(uuid,text,text,text,text,text,jsonb);
 drop function if exists public.place_order(uuid,text,text,text,text,text,boolean,jsonb);
+drop function if exists public.place_order(uuid,text,text,text,text,text,boolean,text,jsonb);
+drop function if exists public.validate_coupon_code(text,integer);
 drop function if exists public.get_order_invoice(text);
+drop function if exists public.get_sheet_sync_orders(text);
+drop function if exists public.mark_sheet_invoice_sent(text,text);
 drop function if exists public.update_order_payment_method(uuid,text,text);
 drop function if exists public.update_order_payment_method(text,text);
 drop function if exists public.admin_list_orders(boolean);
@@ -246,6 +310,79 @@ drop function if exists public.admin_save_pickup_date(uuid,date,integer,boolean)
 drop function if exists public.admin_list_products();
 drop function if exists public.admin_update_product_active(uuid,boolean);
 
+create or replace function public.validate_coupon_code(
+  p_coupon_code text,
+  p_subtotal_cents integer
+)
+returns table(
+  code text,
+  description text,
+  discount_cents integer,
+  final_total_cents integer
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_coupon public.coupons%rowtype;
+  v_code text;
+  v_subtotal integer;
+  v_used_count integer;
+  v_discount integer;
+begin
+  v_code := upper(trim(coalesce(p_coupon_code, '')));
+  v_subtotal := greatest(coalesce(p_subtotal_cents, 0), 0);
+
+  if v_code = '' then
+    raise exception 'Enter a coupon code';
+  end if;
+
+  select *
+  into v_coupon
+  from public.coupons c
+  where c.code = v_code
+    and c.active = true
+    and (c.starts_on is null or c.starts_on <= current_date)
+    and (c.ends_on is null or c.ends_on >= current_date);
+
+  if not found then
+    raise exception 'Coupon code is not valid';
+  end if;
+
+  if v_subtotal < v_coupon.minimum_subtotal_cents then
+    raise exception 'Order subtotal does not meet the coupon minimum';
+  end if;
+
+  if v_coupon.max_uses is not null then
+    select count(*)::integer
+    into v_used_count
+    from public.orders o
+    where o.coupon_code = v_coupon.code
+      and o.fulfillment_status <> 'canceled';
+
+    if v_used_count >= v_coupon.max_uses then
+      raise exception 'Coupon code has already been used';
+    end if;
+  end if;
+
+  if v_coupon.discount_type = 'percent' then
+    v_discount := floor(v_subtotal * v_coupon.percent_off / 100.0)::integer;
+  else
+    v_discount := v_coupon.amount_off_cents;
+  end if;
+
+  v_discount := least(v_discount, v_subtotal);
+
+  return query
+  select
+    v_coupon.code,
+    coalesce(v_coupon.description, ''),
+    v_discount,
+    v_subtotal - v_discount;
+end;
+$$;
+
 create or replace function public.place_order(
   p_pickup_date_id uuid,
   p_customer_name text,
@@ -254,6 +391,7 @@ create or replace function public.place_order(
   p_notes text,
   p_payment_method text,
   p_invoice_requested boolean,
+  p_coupon_code text,
   p_items jsonb
 )
 returns table(order_id uuid, order_code text, total_cents integer)
@@ -273,6 +411,9 @@ declare
   v_quantity integer;
   v_price integer;
   v_capacity_units integer;
+  v_coupon record;
+  v_coupon_code text;
+  v_discount integer;
 begin
   if p_payment_method not in ('Venmo', 'Zelle', 'PayPal', 'CashApp', 'CashAtPickup') then
     raise exception 'Invalid payment method';
@@ -362,6 +503,20 @@ begin
     raise exception 'Not enough capacity';
   end if;
 
+  v_coupon_code := upper(trim(coalesce(p_coupon_code, '')));
+  v_discount := 0;
+
+  if v_coupon_code <> '' then
+    select *
+    into v_coupon
+    from public.validate_coupon_code(v_coupon_code, v_total);
+
+    v_coupon_code := v_coupon.code;
+    v_discount := v_coupon.discount_cents;
+  else
+    v_coupon_code := null;
+  end if;
+
   insert into orders (
     pickup_date_id,
     customer_name,
@@ -370,6 +525,9 @@ begin
     notes,
     payment_method,
     invoice_requested,
+    coupon_code,
+    subtotal_cents,
+    discount_cents,
     total_cents,
     total_loaves
   )
@@ -381,7 +539,10 @@ begin
     nullif(p_notes, ''),
     p_payment_method,
     coalesce(p_invoice_requested, false),
+    v_coupon_code,
     v_total,
+    v_discount,
+    v_total - v_discount,
     v_requested
   )
   returning id into v_order_id;
@@ -413,7 +574,7 @@ begin
     );
   end loop;
 
-  return query select v_order_id, v_order_code, v_total;
+  return query select v_order_id, v_order_code, v_total - v_discount;
 end;
 $$;
 
@@ -458,6 +619,9 @@ returns table(
   notes text,
   payment_method text,
   invoice_requested boolean,
+  coupon_code text,
+  subtotal_cents integer,
+  discount_cents integer,
   total_cents integer,
   total_loaves integer,
   created_at timestamptz,
@@ -478,6 +642,9 @@ begin
     o.notes,
     o.payment_method,
     o.invoice_requested,
+    o.coupon_code,
+    o.subtotal_cents,
+    o.discount_cents,
     o.total_cents,
     o.total_loaves,
     o.created_at,
@@ -504,6 +671,124 @@ begin
 end;
 $$;
 
+create or replace function public.get_sheet_sync_orders(
+  p_sync_token text
+)
+returns table(
+  order_code text,
+  pickup_date date,
+  created_at timestamptz,
+  customer_name text,
+  customer_email text,
+  customer_phone text,
+  payment_method text,
+  payment_status text,
+  fulfillment_status text,
+  invoice_requested boolean,
+  invoice_sent boolean,
+  coupon_code text,
+  subtotal_cents integer,
+  discount_cents integer,
+  total_cents integer,
+  total_loaves integer,
+  notes text,
+  items jsonb
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not exists (
+    select 1
+    from public.app_settings
+    where key = 'google_sheet_sync_token'
+      and value = p_sync_token
+  ) then
+    raise exception 'Invalid sync token';
+  end if;
+
+  return query
+  select
+    o.order_code,
+    d.pickup_date,
+    o.created_at,
+    o.customer_name,
+    o.customer_email,
+    o.customer_phone,
+    o.payment_method,
+    o.payment_status,
+    o.fulfillment_status,
+    o.invoice_requested,
+    o.invoice_sent,
+    o.coupon_code,
+    o.subtotal_cents,
+    o.discount_cents,
+    o.total_cents,
+    o.total_loaves,
+    o.notes,
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'product_name',
+            case
+              when p.display_group is not null and p.option_label is not null
+                then p.display_group || ' - ' || p.option_label
+              else p.name
+            end,
+          'quantity', oi.quantity,
+          'unit_price_cents', oi.unit_price_cents
+        )
+        order by coalesce(p.display_group, p.name), coalesce(p.option_label, p.name), p.name
+      ) filter (where oi.id is not null),
+      '[]'::jsonb
+    ) as items
+  from public.orders o
+  join public.pickup_dates d on d.id = o.pickup_date_id
+  left join public.order_items oi on oi.order_id = o.id
+  left join public.products p on p.id = oi.product_id
+  where o.fulfillment_status <> 'canceled'
+  group by o.id, d.pickup_date
+  order by d.pickup_date asc, o.created_at asc;
+end;
+$$;
+
+create or replace function public.mark_sheet_invoice_sent(
+  p_sync_token text,
+  p_order_code text
+)
+returns table(order_code text, invoice_requested boolean, invoice_sent boolean)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not exists (
+    select 1
+    from public.app_settings
+    where key = 'google_sheet_sync_token'
+      and value = p_sync_token
+  ) then
+    raise exception 'Invalid sync token';
+  end if;
+
+  update public.orders
+  set
+    invoice_requested = true,
+    invoice_sent = true
+  where orders.order_code = upper(trim(p_order_code));
+
+  if not found then
+    raise exception 'Order not found';
+  end if;
+
+  return query
+  select o.order_code, o.invoice_requested, o.invoice_sent
+  from public.orders o
+  where o.order_code = upper(trim(p_order_code));
+end;
+$$;
+
 create or replace function public.admin_list_orders(
   p_include_archived boolean default false
 )
@@ -521,6 +806,9 @@ returns table(
   archived boolean,
   invoice_requested boolean,
   invoice_sent boolean,
+  coupon_code text,
+  subtotal_cents integer,
+  discount_cents integer,
   total_cents integer,
   total_loaves integer,
   created_at timestamptz,
@@ -550,6 +838,9 @@ begin
     o.archived,
     o.invoice_requested,
     o.invoice_sent,
+    o.coupon_code,
+    o.subtotal_cents,
+    o.discount_cents,
     o.total_cents,
     o.total_loaves,
     o.created_at,
@@ -798,11 +1089,20 @@ begin
 end;
 $$;
 
-revoke all on function public.place_order(uuid,text,text,text,text,text,boolean,jsonb) from public;
-grant execute on function public.place_order(uuid,text,text,text,text,text,boolean,jsonb) to anon, authenticated;
+revoke all on function public.place_order(uuid,text,text,text,text,text,boolean,text,jsonb) from public;
+grant execute on function public.place_order(uuid,text,text,text,text,text,boolean,text,jsonb) to anon, authenticated;
+
+revoke all on function public.validate_coupon_code(text,integer) from public;
+grant execute on function public.validate_coupon_code(text,integer) to anon, authenticated;
 
 revoke all on function public.get_order_invoice(text) from public;
 grant execute on function public.get_order_invoice(text) to anon, authenticated;
+
+revoke all on function public.get_sheet_sync_orders(text) from public;
+grant execute on function public.get_sheet_sync_orders(text) to anon, authenticated;
+
+revoke all on function public.mark_sheet_invoice_sent(text,text) from public;
+grant execute on function public.mark_sheet_invoice_sent(text,text) to anon, authenticated;
 
 revoke all on function public.update_order_payment_method(text,text) from public;
 grant execute on function public.update_order_payment_method(text,text) to anon, authenticated;
