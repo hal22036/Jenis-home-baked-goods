@@ -1,6 +1,6 @@
 const SUPABASE_URL = "https://qvxrbipxxlygmmecgjxf.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_-w4Ef_bqgM_l9bY00thSpg_xohk7e9M";
-const SYNC_TOKEN = "fP3pzQgRx6MmgForhqGApPsCAQ9QwwzmcufvoNLG";
+const SYNC_TOKEN = "REPLACE_WITH_YOUR_GOOGLE_SHEET_SYNC_TOKEN";
 const OWNER_EMAIL = "jenika19@hotmail.com";
 const WEBSITE_URL = "https://jenisgoods.com";
 const PICKUP_DETAILS = "Pickup is between 4-7 pm at 7140 Anchor Terrace St. Gate Code: #7716.";
@@ -32,12 +32,17 @@ function syncWebsiteOrders() {
   const websiteOrders = fetchWebsiteOrders();
   Logger.log(`Fetched ${websiteOrders.length} website orders`);
 
-  const existingCodes = existingWebsiteOrderCodes(ordersSheet);
-  const newOrders = websiteOrders.filter(order => !existingCodes.has(order.order_code));
-  Logger.log(`Found ${newOrders.length} new orders`);
+  ensureWebsiteSyncColumns(ordersSheet);
 
-  if (newOrders.length) {
-    writeOrdersToSheet(ordersSheet, orderItemsSheet, newOrders);
+  const existingRows = existingWebsiteOrderRows(ordersSheet);
+  const newOrders = websiteOrders.filter(order => !existingRows.has(order.order_code));
+  const updatedOrders = websiteOrders.filter(order => existingRows.has(order.order_code));
+  Logger.log(`Found ${newOrders.length} new orders`);
+  Logger.log(`Found ${updatedOrders.length} existing orders to refresh`);
+
+  if (websiteOrders.length) {
+    const orderRowsByCode = upsertOrdersToSheet(ordersSheet, websiteOrders, existingRows);
+    replaceWebsiteOrderItems(orderItemsSheet, websiteOrders, orderRowsByCode);
 
     if (EMAIL_OWNER_NEW_ORDERS) {
       newOrders.forEach(sendOwnerOrderEmail);
@@ -48,7 +53,7 @@ function syncWebsiteOrders() {
     emailRequestedInvoices(websiteOrders);
   }
 
-  Logger.log(`Sync complete. Added ${newOrders.length} new website order${newOrders.length === 1 ? "" : "s"}.`);
+  Logger.log(`Sync complete. Added ${newOrders.length} and refreshed ${updatedOrders.length} website order${updatedOrders.length === 1 ? "" : "s"}.`);
 }
 
 function syncWebsiteOrdersSafe() {
@@ -78,33 +83,36 @@ function removeAutomaticSync() {
   Logger.log("Removed auto sync triggers.");
 }
 
-function writeOrdersToSheet(ordersSheet, orderItemsSheet, newOrders) {
+function upsertOrdersToSheet(ordersSheet, websiteOrders, existingRows) {
   let nextOrderId = nextNumericOrderId(ordersSheet);
   let nextOrderRow = lastFilledRow(ordersSheet, 1) + 1;
-  let nextItemRow = lastFilledRow(orderItemsSheet, 1) + 1;
-  const orderRows = [];
-  const itemRows = [];
+  const orderRowsByCode = new Map(existingRows);
+  const rowsToWrite = [];
 
-  newOrders.forEach(order => {
-    const orderId = nextOrderId++;
+  websiteOrders.forEach(order => {
+    const existingOrder = existingRows.get(order.order_code);
+    const orderId = existingOrder ? existingOrder.orderId : nextOrderId++;
     const orderDate = localDate(order.pickup_date);
-    const orderRowNumber = nextOrderRow++;
+    const orderRowNumber = existingOrder ? existingOrder.row : nextOrderRow++;
+    const fulfillmentStatus = String(order.fulfillment_status || "").toLowerCase();
+    const isCanceled = fulfillmentStatus === "canceled";
     const discountCents = Number(order.discount_cents || 0);
     const taxCents = Number(order.tax_cents || 0);
     const shippingCents = Number(order.shipping_cents || 0);
-    const adjustmentCents = taxCents + shippingCents - discountCents;
+    const adjustmentCents = isCanceled ? 0 : taxCents + shippingCents - discountCents;
     const notes = [
       order.notes || "",
       `Method: ${fulfillmentLabel(order.fulfillment_method)}`,
       order.shipping_address ? `Shipping address: ${order.shipping_address}` : "",
       discountCents ? `Coupon ${order.coupon_code} (${couponAppliesToLabel(order.coupon_applies_to)}): -${money(discountCents)}` : "",
       taxCents ? `Tax: ${money(taxCents)}` : "",
-      shippingCents ? `Shipping: ${money(shippingCents)}` : ""
+      shippingCents ? `Shipping: ${money(shippingCents)}` : "",
+      isCanceled ? "Canceled in website admin" : ""
     ]
       .filter(Boolean)
       .join(" | ");
 
-    orderRows.push([
+    const orderRow = [
       orderId,
       orderDate,
       order.customer_name || "",
@@ -115,39 +123,106 @@ function writeOrdersToSheet(ordersSheet, orderItemsSheet, newOrders) {
       `=IF(A${orderRowNumber}="","",SUMIF('Order Items'!$A:$A,A${orderRowNumber},'Order Items'!$H:$H))`,
       `=IF(G${orderRowNumber}="","",G${orderRowNumber}-H${orderRowNumber})`,
       notes,
-      order.order_code
-    ]);
+      order.order_code,
+      statusLabel(order.payment_status),
+      statusLabel(order.fulfillment_status),
+      invoiceStatusLabel(order),
+      order.archived ? "Yes" : "No",
+      new Date()
+    ];
 
-    (order.items || []).forEach(item => {
-      const itemRowNumber = nextItemRow++;
-
-      itemRows.push([
-        orderId,
-        orderDate,
-        item.product_name || "",
-        Number(item.quantity || 0),
-        centsToDollars(item.unit_price_cents),
-        productCostFormula(itemRowNumber),
-        `=IF(OR(D${itemRowNumber}="",E${itemRowNumber}=""),"",D${itemRowNumber}*E${itemRowNumber})`,
-        `=IF(OR(D${itemRowNumber}="",F${itemRowNumber}=""),"",D${itemRowNumber}*F${itemRowNumber})`,
-        `=IF(G${itemRowNumber}="","",G${itemRowNumber}-H${itemRowNumber})`,
-        order.order_code,
-        notes
-      ]);
-    });
+    rowsToWrite.push({ row: orderRowNumber, values: orderRow });
+    orderRowsByCode.set(order.order_code, { row: orderRowNumber, orderId });
   });
 
-  if (orderRows.length) {
-    const startRow = nextOrderRow - orderRows.length;
-    Logger.log(`Writing ${orderRows.length} order rows`);
-    ordersSheet.getRange(startRow, 1, orderRows.length, 11).setValues(orderRows);
+  rowsToWrite.forEach(entry => {
+    ordersSheet.getRange(entry.row, 1, 1, entry.values.length).setValues([entry.values]);
+  });
+
+  Logger.log(`Wrote ${rowsToWrite.length} website order row${rowsToWrite.length === 1 ? "" : "s"}`);
+  return orderRowsByCode;
+}
+
+function replaceWebsiteOrderItems(orderItemsSheet, websiteOrders, orderRowsByCode) {
+  const websiteOrderCodes = new Set(websiteOrders.map(order => order.order_code));
+  deleteExistingWebsiteOrderItems(orderItemsSheet, websiteOrderCodes);
+
+  const itemRows = [];
+  let nextItemRow = lastFilledRow(orderItemsSheet, 1) + 1;
+
+  websiteOrders
+    .filter(order => String(order.fulfillment_status || "").toLowerCase() !== "canceled")
+    .forEach(order => {
+      const orderRow = orderRowsByCode.get(order.order_code);
+      if (!orderRow) return;
+
+      const orderId = orderRow.orderId;
+      const orderDate = localDate(order.pickup_date);
+      const notes = sheetOrderNotes(order);
+
+      (order.items || []).forEach(item => {
+        const itemRowNumber = nextItemRow++;
+
+        itemRows.push([
+          orderId,
+          orderDate,
+          item.product_name || "",
+          Number(item.quantity || 0),
+          centsToDollars(item.unit_price_cents),
+          productCostFormula(itemRowNumber),
+          `=IF(OR(D${itemRowNumber}="",E${itemRowNumber}=""),"",D${itemRowNumber}*E${itemRowNumber})`,
+          `=IF(OR(D${itemRowNumber}="",F${itemRowNumber}=""),"",D${itemRowNumber}*F${itemRowNumber})`,
+          `=IF(G${itemRowNumber}="","",G${itemRowNumber}-H${itemRowNumber})`,
+          order.order_code,
+          notes
+        ]);
+      });
+    });
+
+  if (!itemRows.length) {
+    Logger.log("No active website order item rows to write.");
+    return;
   }
 
-  if (itemRows.length) {
-    const startRow = nextItemRow - itemRows.length;
-    Logger.log(`Writing ${itemRows.length} item rows`);
-    orderItemsSheet.getRange(startRow, 1, itemRows.length, 11).setValues(itemRows);
+  const startRow = nextItemRow - itemRows.length;
+  Logger.log(`Writing ${itemRows.length} refreshed item rows`);
+  orderItemsSheet.getRange(startRow, 1, itemRows.length, 11).setValues(itemRows);
+}
+
+function deleteExistingWebsiteOrderItems(sheet, websiteOrderCodes) {
+  const lastRow = lastFilledRow(sheet, 1);
+  if (lastRow < 2 || !websiteOrderCodes.size) return;
+
+  const orderCodes = sheet.getRange(2, 10, lastRow - 1, 1).getValues().flat();
+  let deleted = 0;
+
+  for (let index = orderCodes.length - 1; index >= 0; index -= 1) {
+    const code = String(orderCodes[index] || "").trim();
+    if (websiteOrderCodes.has(code)) {
+      sheet.deleteRow(index + 2);
+      deleted += 1;
+    }
   }
+
+  Logger.log(`Deleted ${deleted} existing website order item row${deleted === 1 ? "" : "s"}.`);
+}
+
+function sheetOrderNotes(order) {
+  const discountCents = Number(order.discount_cents || 0);
+  const taxCents = Number(order.tax_cents || 0);
+  const shippingCents = Number(order.shipping_cents || 0);
+
+  return [
+    order.notes || "",
+    `Method: ${fulfillmentLabel(order.fulfillment_method)}`,
+    order.shipping_address ? `Shipping address: ${order.shipping_address}` : "",
+    discountCents ? `Coupon ${order.coupon_code} (${couponAppliesToLabel(order.coupon_applies_to)}): -${money(discountCents)}` : "",
+    taxCents ? `Tax: ${money(taxCents)}` : "",
+    shippingCents ? `Shipping: ${money(shippingCents)}` : "",
+    String(order.fulfillment_status || "").toLowerCase() === "canceled" ? "Canceled in website admin" : ""
+  ]
+    .filter(Boolean)
+    .join(" | ");
 }
 
 function fetchWebsiteOrders() {
@@ -339,18 +414,32 @@ function plainItemsText(order) {
     .join("\n");
 }
 
-function existingWebsiteOrderCodes(sheet) {
-  const lastRow = lastFilledRow(sheet, 1);
-  if (lastRow < 2) return new Set();
+function ensureWebsiteSyncColumns(sheet) {
+  const headers = [
+    ["Website Order Code", "Payment Status", "Fulfillment Status", "Invoice Status", "Archived", "Last Website Sync"]
+  ];
 
-  return new Set(
-    sheet
-      .getRange(2, 11, lastRow - 1, 1)
-      .getValues()
-      .flat()
-      .map(value => String(value || "").trim())
-      .filter(Boolean)
-  );
+  sheet.getRange(1, 11, 1, headers[0].length).setValues(headers);
+}
+
+function existingWebsiteOrderRows(sheet) {
+  const lastRow = lastFilledRow(sheet, 1);
+  const rows = new Map();
+  if (lastRow < 2) return rows;
+
+  const values = sheet.getRange(2, 1, lastRow - 1, 11).getValues();
+
+  values.forEach((row, index) => {
+    const code = String(row[10] || "").trim();
+    if (!code) return;
+
+    rows.set(code, {
+      row: index + 2,
+      orderId: row[0]
+    });
+  });
+
+  return rows;
 }
 
 function nextNumericOrderId(sheet) {
@@ -421,8 +510,20 @@ function paymentLabel(value) {
   }[value] || value || "";
 }
 
+function statusLabel(value) {
+  return String(value || "")
+    .split("_")
+    .map(word => word ? word[0].toUpperCase() + word.slice(1) : "")
+    .join(" ");
+}
+
 function fulfillmentLabel(value) {
   return value === "shipping" ? "Shipping" : "Pickup";
+}
+
+function invoiceStatusLabel(order) {
+  if (!order.invoice_requested) return "Not requested";
+  return order.invoice_sent ? "Requested and sent" : "Requested";
 }
 
 function couponAppliesToLabel(value) {

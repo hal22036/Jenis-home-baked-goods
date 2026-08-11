@@ -904,6 +904,7 @@ returns table(
   payment_method text,
   payment_status text,
   fulfillment_status text,
+  archived boolean,
   invoice_requested boolean,
   invoice_sent boolean,
   coupon_code text,
@@ -944,6 +945,7 @@ begin
     o.payment_method,
     o.payment_status,
     o.fulfillment_status,
+    o.archived,
     o.invoice_requested,
     o.invoice_sent,
     o.coupon_code,
@@ -977,7 +979,6 @@ begin
   join public.pickup_dates d on d.id = o.pickup_date_id
   left join public.order_items oi on oi.order_id = o.id
   left join public.products p on p.id = oi.product_id
-  where o.fulfillment_status <> 'canceled'
   group by o.id, d.pickup_date
   order by d.pickup_date asc, o.created_at asc;
 end;
