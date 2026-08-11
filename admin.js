@@ -353,11 +353,7 @@ function syncManualItemRow(row) {
     priceInput.value = centsToDollars(product.price_cents);
     taxCategory.value = product.tax_category || "home_bakery";
     loafSpots.value = product.capacity_units || 0;
-    productDetails.innerHTML = `
-      <span>Price each: <strong>${money(product.price_cents)}</strong></span>
-      <span>Loaf spots each: <strong>${product.capacity_units || 0}</strong></span>
-      <span>${taxCategoryLabel(product.tax_category)}</span>
-    `;
+    refreshManualRowTotals(row);
   } else if (isOther && previousProductId && previousProductId !== "other") {
     priceInput.value = "";
     taxCategory.value = "home_bakery";
@@ -369,6 +365,24 @@ function syncManualItemRow(row) {
   }
 
   row.dataset.selectedProductId = productSelect.value;
+}
+
+function refreshManualRowTotals(row) {
+  const productSelect = row.querySelector("[data-manual-product-select]");
+  const productDetails = row.querySelector("[data-manual-product-details]");
+  const product = productById(productSelect.value);
+
+  if (!product || productDetails.hidden) return;
+
+  const quantity = Number(row.querySelector("[data-manual-item-quantity]").value || 0);
+  const loafSpotsEach = Number(product.capacity_units || 0);
+  const rowLoafSpots = quantity * loafSpotsEach;
+
+  productDetails.innerHTML = `
+    <span>Price each: <strong>${money(product.price_cents)}</strong></span>
+    <span>Loaf spots: <strong>${rowLoafSpots}</strong> total (${loafSpotsEach} each)</span>
+    <span>${taxCategoryLabel(product.tax_category)}</span>
+  `;
 }
 
 function manualOrderItems() {
@@ -400,6 +414,7 @@ function manualOrderItems() {
 }
 
 function updateManualOrderSubtotal() {
+  el.manualItemsList.querySelectorAll(".manual-item-row").forEach(refreshManualRowTotals);
   const items = manualOrderItems();
   const subtotal = items.reduce((sum, item) => sum + (Number(item.quantity || 0) * Number(item.unit_price_cents || 0)), 0);
   const discount = Math.min(dollarsToCents(el.manualDiscount.value), subtotal);
