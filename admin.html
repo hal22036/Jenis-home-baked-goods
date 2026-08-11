@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bakery Admin | Jeni's Home Baked Goods</title>
   <link rel="stylesheet" href="styles.css?v=20260810-admin-pages" />
-  <link rel="stylesheet" href="admin.css?v=20260810-tax-settings" />
+  <link rel="stylesheet" href="admin.css?v=20260810-manual-discount" />
 </head>
 <body>
   <header class="site-header admin-header">
@@ -124,10 +124,6 @@
                 <option value="canceled">Canceled</option>
               </select>
             </label>
-            <label>
-              Loaf spots
-              <input id="manual-total-loaves" type="number" min="0" value="0" />
-            </label>
           </div>
           <label>
             Notes
@@ -135,12 +131,28 @@
           </label>
           <div class="manual-items-heading">
             <strong>Items</strong>
-            <button class="secondary-button compact-button" type="button" id="add-manual-item">Add item</button>
           </div>
           <div id="manual-items-list" class="manual-items-list"></div>
+          <button class="secondary-button compact-button manual-add-item-button" type="button" id="add-manual-item">Add item</button>
+          <label class="manual-discount-field">
+            Discount
+            <input id="manual-discount" type="number" min="0" step="0.01" value="0.00" />
+          </label>
           <div class="manual-order-total">
             <span>Subtotal</span>
             <strong id="manual-order-subtotal">$0.00</strong>
+          </div>
+          <div class="manual-order-total">
+            <span>Discount</span>
+            <strong id="manual-order-discount">$0.00</strong>
+          </div>
+          <div class="manual-order-total">
+            <span>After discount</span>
+            <strong id="manual-order-after-discount">$0.00</strong>
+          </div>
+          <div class="manual-order-total">
+            <span>Loaf spots</span>
+            <strong id="manual-order-loaf-spots">0</strong>
           </div>
           <button type="submit">Save in-person order</button>
           <p id="manual-order-message" class="message" role="status"></p>
@@ -327,6 +339,6 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="admin.js?v=20260810-tax-settings"></script>
+  <script src="admin.js?v=20260810-manual-discount"></script>
 </body>
 </html>

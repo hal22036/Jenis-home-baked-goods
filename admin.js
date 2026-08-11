@@ -43,11 +43,14 @@ const el = {
   manualPaymentMethod: document.querySelector("#manual-payment-method"),
   manualPaymentStatus: document.querySelector("#manual-payment-status"),
   manualFulfillmentStatus: document.querySelector("#manual-fulfillment-status"),
-  manualTotalLoaves: document.querySelector("#manual-total-loaves"),
   manualNotes: document.querySelector("#manual-notes"),
   addManualItem: document.querySelector("#add-manual-item"),
   manualItemsList: document.querySelector("#manual-items-list"),
+  manualDiscount: document.querySelector("#manual-discount"),
   manualOrderSubtotal: document.querySelector("#manual-order-subtotal"),
+  manualOrderDiscount: document.querySelector("#manual-order-discount"),
+  manualOrderAfterDiscount: document.querySelector("#manual-order-after-discount"),
+  manualOrderLoafSpots: document.querySelector("#manual-order-loaf-spots"),
   manualOrderMessage: document.querySelector("#manual-order-message"),
   refreshOrders: document.querySelector("#refresh-orders"),
   refreshProducts: document.querySelector("#refresh-products"),
@@ -213,6 +216,13 @@ el.clearOrderFilters.addEventListener("click", () => {
 });
 el.addManualItem.addEventListener("click", () => addManualItemRow());
 el.manualItemsList.addEventListener("input", updateManualOrderSubtotal);
+el.manualDiscount.addEventListener("input", updateManualOrderSubtotal);
+el.manualItemsList.addEventListener("change", event => {
+  if (event.target.matches("[data-manual-product-select]")) {
+    syncManualItemRow(event.target.closest(".manual-item-row"));
+  }
+  updateManualOrderSubtotal();
+});
 el.manualItemsList.addEventListener("click", event => {
   const button = event.target.closest("[data-remove-manual-item]");
   if (!button) return;
@@ -250,8 +260,16 @@ function addManualItemRow(item = {}) {
   row.className = "manual-item-row";
   row.innerHTML = `
     <label>
-      Item
-      <input data-manual-item-name required placeholder="Classic White" value="${escapeAttribute(item.name || "")}" />
+      Product
+      <select data-manual-product-select>
+        <option value="">Choose product</option>
+        ${manualProductOptions(item.productId)}
+        <option value="other" ${item.productId === "other" ? "selected" : ""}>Other / custom item</option>
+      </select>
+    </label>
+    <label class="manual-custom-name-field" hidden>
+      Custom item
+      <input data-manual-item-name placeholder="Special order" value="${escapeAttribute(item.name || "")}" />
     </label>
     <label>
       Qty
@@ -259,7 +277,7 @@ function addManualItemRow(item = {}) {
     </label>
     <label>
       Price each
-      <input data-manual-item-price type="number" min="0" step="0.01" required value="${item.priceCents ? centsToDollars(item.priceCents) : ""}" placeholder="0.00" />
+      <input data-manual-item-price type="number" min="0" step="0.01" required placeholder="0.00" />
     </label>
     <label>
       Tax type
@@ -268,29 +286,118 @@ function addManualItemRow(item = {}) {
         ${option("general_product", "General product", item.taxCategory || "home_bakery")}
       </select>
     </label>
+    <label>
+      Loaf spots each
+      <input data-manual-item-loaf-spots type="number" min="0" step="1" value="${item.loafSpots ?? 0}" />
+    </label>
     <button class="secondary-button compact-button" type="button" data-remove-manual-item>Remove</button>
   `;
   el.manualItemsList.append(row);
+  syncManualItemRow(row);
   updateManualOrderSubtotal();
+}
+
+function manualProductOptions(selectedProductId) {
+  return state.products
+    .filter(product => product.active)
+    .map(product => {
+      const label = product.display_group && product.option_label
+        ? `${product.display_group} - ${product.option_label}`
+        : product.name;
+      return `<option value="${product.id}" ${product.id === selectedProductId ? "selected" : ""}>${escapeHtml(label)}</option>`;
+    })
+    .join("");
+}
+
+function refreshManualProductSelects() {
+  el.manualItemsList.querySelectorAll(".manual-item-row").forEach(row => {
+    const productSelect = row.querySelector("[data-manual-product-select]");
+    const selected = productSelect.value;
+    productSelect.innerHTML = `
+      <option value="">Choose product</option>
+      ${manualProductOptions(selected)}
+      <option value="other" ${selected === "other" ? "selected" : ""}>Other / custom item</option>
+    `;
+    syncManualItemRow(row);
+  });
+  updateManualOrderSubtotal();
+}
+
+function productById(productId) {
+  return state.products.find(product => product.id === productId);
+}
+
+function syncManualItemRow(row) {
+  const productSelect = row.querySelector("[data-manual-product-select]");
+  const customField = row.querySelector(".manual-custom-name-field");
+  const customName = row.querySelector("[data-manual-item-name]");
+  const priceInput = row.querySelector("[data-manual-item-price]");
+  const taxCategory = row.querySelector("[data-manual-item-tax-category]");
+  const loafSpots = row.querySelector("[data-manual-item-loaf-spots]");
+  const product = productById(productSelect.value);
+  const isOther = productSelect.value === "other";
+  const previousProductId = row.dataset.selectedProductId || "";
+
+  customField.hidden = !isOther;
+  customName.required = isOther;
+  priceInput.readOnly = Boolean(product);
+  taxCategory.disabled = Boolean(product);
+  loafSpots.readOnly = Boolean(product);
+
+  if (product) {
+    priceInput.value = centsToDollars(product.price_cents);
+    taxCategory.value = product.tax_category || "home_bakery";
+    loafSpots.value = product.capacity_units || 0;
+  } else if (isOther && previousProductId && previousProductId !== "other") {
+    priceInput.value = "";
+    taxCategory.value = "home_bakery";
+    loafSpots.value = "0";
+  } else if (!isOther) {
+    priceInput.value = "";
+    taxCategory.value = "home_bakery";
+    loafSpots.value = "0";
+  }
+
+  row.dataset.selectedProductId = productSelect.value;
 }
 
 function manualOrderItems() {
   return [...el.manualItemsList.querySelectorAll(".manual-item-row")]
-    .map(row => ({
-      name: row.querySelector("[data-manual-item-name]").value.trim(),
-      quantity: Number(row.querySelector("[data-manual-item-quantity]").value || 0),
-      unit_price_cents: dollarsToCents(row.querySelector("[data-manual-item-price]").value),
-      tax_category: row.querySelector("[data-manual-item-tax-category]").value
-    }))
+    .map(row => {
+      const selectedProductId = row.querySelector("[data-manual-product-select]").value;
+      const product = productById(selectedProductId);
+      const isOther = selectedProductId === "other";
+      const quantity = Number(row.querySelector("[data-manual-item-quantity]").value || 0);
+      const unitPriceCents = product
+        ? product.price_cents
+        : dollarsToCents(row.querySelector("[data-manual-item-price]").value);
+      const loafSpotsEach = product
+        ? Number(product.capacity_units || 0)
+        : Number(row.querySelector("[data-manual-item-loaf-spots]").value || 0);
+
+      return {
+        name: product
+          ? (product.display_group && product.option_label ? `${product.display_group} - ${product.option_label}` : product.name)
+          : row.querySelector("[data-manual-item-name]").value.trim(),
+        quantity,
+        unit_price_cents: unitPriceCents,
+        tax_category: product ? (product.tax_category || "home_bakery") : row.querySelector("[data-manual-item-tax-category]").value,
+        loaf_spots: quantity * loafSpotsEach,
+        is_other: isOther
+      };
+    })
     .filter(item => item.name || item.quantity || item.unit_price_cents);
 }
 
 function updateManualOrderSubtotal() {
-  const subtotal = manualOrderItems().reduce(
-    (sum, item) => sum + (Number(item.quantity || 0) * Number(item.unit_price_cents || 0)),
-    0
-  );
+  const items = manualOrderItems();
+  const subtotal = items.reduce((sum, item) => sum + (Number(item.quantity || 0) * Number(item.unit_price_cents || 0)), 0);
+  const discount = Math.min(dollarsToCents(el.manualDiscount.value), subtotal);
+  const loafSpots = items.reduce((sum, item) => sum + Number(item.loaf_spots || 0), 0);
   el.manualOrderSubtotal.textContent = money(subtotal);
+  el.manualOrderDiscount.textContent = `-${money(discount)}`;
+  el.manualOrderAfterDiscount.textContent = money(Math.max(subtotal - discount, 0));
+  el.manualOrderLoafSpots.textContent = loafSpots;
 }
 
 function clearManualOrderForm() {
@@ -306,12 +413,20 @@ async function saveManualOrder(event) {
   event.preventDefault();
 
   const items = manualOrderItems();
+  const subtotal = items.reduce((sum, item) => sum + (Number(item.quantity || 0) * Number(item.unit_price_cents || 0)), 0);
+  const discountCents = dollarsToCents(el.manualDiscount.value);
   const invalidItem = items.find(item =>
-    !item.name || item.quantity <= 0 || item.unit_price_cents < 0
+    !item.name || item.quantity <= 0 || item.unit_price_cents < 0 || item.loaf_spots < 0
   );
 
   if (!items.length || invalidItem) {
     setMessage(el.manualOrderMessage, "Add at least one item with a name, quantity, and price.", "error");
+    return;
+  }
+
+  if (discountCents > subtotal) {
+    setMessage(el.manualOrderMessage, "Discount cannot be more than the subtotal.", "error");
+    el.manualDiscount.focus();
     return;
   }
 
@@ -328,7 +443,8 @@ async function saveManualOrder(event) {
     p_payment_method: el.manualPaymentMethod.value,
     p_payment_status: el.manualPaymentStatus.value,
     p_fulfillment_status: el.manualFulfillmentStatus.value,
-    p_total_loaves: Number(el.manualTotalLoaves.value || 0),
+    p_total_loaves: items.reduce((sum, item) => sum + Number(item.loaf_spots || 0), 0),
+    p_discount_cents: discountCents,
     p_items: items
   });
 
@@ -680,6 +796,7 @@ async function loadProducts() {
 
   state.products = data || [];
   renderProducts();
+  refreshManualProductSelects();
   setMessage(el.productAdminMessage, `${state.products.length} product${state.products.length === 1 ? "" : "s"} shown.`, "success");
 }
 

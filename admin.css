@@ -288,12 +288,24 @@
 }
 
 .manual-item-row {
-  grid-template-columns: minmax(180px, 1fr) minmax(80px, 0.2fr) minmax(120px, 0.3fr) minmax(150px, 0.35fr) auto;
+  grid-template-columns: minmax(180px, 1.2fr) minmax(170px, 1fr) minmax(74px, 0.25fr) minmax(115px, 0.35fr) minmax(145px, 0.45fr) minmax(105px, 0.3fr) auto;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fffdf9;
 }
 
 .manual-items-list {
   display: grid;
   gap: 10px;
+}
+
+.manual-add-item-button {
+  justify-self: start;
+}
+
+.manual-discount-field {
+  max-width: 220px;
 }
 
 .manual-items-heading,
