@@ -270,6 +270,7 @@ function renderOrders() {
         <h3>${prettyDate(pickupDate)}</h3>
         <span>${dateOrders.length} order${dateOrders.length === 1 ? "" : "s"}</span>
       </div>
+      ${bakingBreakdownMarkup(dateOrders)}
       <div class="orders-list">
         ${dateOrders.map(order => orderCardMarkup(order)).join("")}
       </div>
@@ -285,6 +286,52 @@ function renderOrders() {
   el.ordersList.querySelectorAll("[data-save-order]").forEach(button => {
     button.addEventListener("click", saveOrderStatus);
   });
+}
+
+function bakingBreakdownMarkup(orders) {
+  const itemTotals = new Map();
+  const activeOrders = orders.filter(order => !order.archived && order.fulfillment_status !== "canceled");
+
+  activeOrders.forEach(order => {
+    (order.items || []).forEach(item => {
+      const itemName = adminItemName(item);
+      itemTotals.set(itemName, (itemTotals.get(itemName) || 0) + Number(item.quantity || 0));
+    });
+  });
+
+  const items = [...itemTotals.entries()]
+    .filter(([, quantity]) => quantity > 0)
+    .sort(([firstName], [secondName]) => firstName.localeCompare(secondName));
+
+  if (!items.length) {
+    return `
+      <aside class="baking-breakdown">
+        <div>
+          <h4>Baking breakdown</h4>
+          <p>No active items to bake for this date.</p>
+        </div>
+      </aside>
+    `;
+  }
+
+  const totalItems = items.reduce((total, [, quantity]) => total + quantity, 0);
+
+  return `
+    <aside class="baking-breakdown">
+      <div>
+        <h4>Baking breakdown</h4>
+        <p>${totalItems} item${totalItems === 1 ? "" : "s"} from active orders</p>
+      </div>
+      <div class="baking-items">
+        ${items.map(([name, quantity]) => `
+          <div>
+            <span>${escapeHtml(name)}</span>
+            <strong>${quantity}</strong>
+          </div>
+        `).join("")}
+      </div>
+    </aside>
+  `;
 }
 
 function orderCardMarkup(order) {
@@ -405,6 +452,15 @@ function adminItemName(item) {
 function invoiceStatusLabel(order) {
   if (!order.invoice_requested) return "Not requested";
   return order.invoice_sent ? "Requested and sent" : "Requested";
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 function escapeAttribute(value) {
