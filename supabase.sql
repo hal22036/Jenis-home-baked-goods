@@ -13,6 +13,7 @@ create table if not exists public.products (
   option_label text,
   image_url text,
   shippable boolean not null default false,
+  tax_category text not null default 'home_bakery' check (tax_category in ('home_bakery','general_product')),
   active boolean not null default true,
   sort_order integer not null default 0
 );
@@ -87,9 +88,87 @@ create table if not exists public.app_settings (
   value text not null
 );
 
+create table if not exists public.sales_tax_rates (
+  state_code text primary key,
+  state_name text not null,
+  home_bakery_basis_points integer not null default 0 check (home_bakery_basis_points >= 0),
+  general_product_basis_points integer not null default 0 check (general_product_basis_points >= 0),
+  home_bakery_note text,
+  general_product_note text
+);
+
 insert into public.app_settings (key, value)
-values ('google_sheet_sync_token', 'REPLACE_WITH_YOUR_GOOGLE_SHEET_SYNC_TOKEN')
+values
+  ('google_sheet_sync_token', 'REPLACE_WITH_YOUR_GOOGLE_SHEET_SYNC_TOKEN'),
+  ('tax_enabled', 'false'),
+  ('business_state', 'NV')
 on conflict (key) do nothing;
+
+insert into public.sales_tax_rates (
+  state_code,
+  state_name,
+  home_bakery_basis_points,
+  general_product_basis_points,
+  home_bakery_note,
+  general_product_note
+) values
+  ('AL','Alabama',200,946,'Local taxes generally apply','Average product total'),
+  ('AK','Alaska',0,182,'Varies; local tax may apply','Average product total'),
+  ('AZ','Arizona',0,854,'Varies by locality','Average product total'),
+  ('AR','Arkansas',0,948,'Local taxes generally apply','Average product total'),
+  ('CA','California',0,903,'Generally exempt','Average product total'),
+  ('CO','Colorado',0,789,'Varies by home-rule locality','Average product total'),
+  ('CT','Connecticut',0,635,'No general local tax','Average product total'),
+  ('DE','Delaware',0,0,'No sales tax','No sales tax'),
+  ('FL','Florida',0,698,'Generally exempt','Average product total'),
+  ('GA','Georgia',0,756,'Local taxes generally apply','Average product total'),
+  ('HI','Hawaii',400,450,'GET; county surcharge may apply','Average product total'),
+  ('ID','Idaho',600,603,'Generally applies','Average product total'),
+  ('IL','Illinois',0,898,'Some localities charge 1%','Average product total'),
+  ('IN','Indiana',0,700,'No general local tax','Average product total'),
+  ('IA','Iowa',0,694,'Generally exempt','Average product total'),
+  ('KS','Kansas',0,871,'Local taxes generally apply','Average product total'),
+  ('KY','Kentucky',0,600,'No general local tax','Average product total'),
+  ('LA','Louisiana',0,1013,'Varies; local tax may apply','Average product total'),
+  ('ME','Maine',0,550,'No general local tax','Average product total'),
+  ('MD','Maryland',0,600,'No general local tax','Average product total'),
+  ('MA','Massachusetts',0,625,'No general local tax','Average product total'),
+  ('MI','Michigan',0,600,'No general local tax','Average product total'),
+  ('MN','Minnesota',0,814,'Generally exempt','Average product total'),
+  ('MS','Mississippi',500,706,'Some local tax may apply','Average product total'),
+  ('MO','Missouri',123,844,'Local taxes generally apply','Average product total'),
+  ('MT','Montana',0,0,'No general sales tax','No general sales tax'),
+  ('NE','Nebraska',0,698,'Generally exempt','Average product total'),
+  ('NV','Nevada',0,824,'Generally exempt','Average product total'),
+  ('NH','New Hampshire',0,0,'No general sales tax','No general sales tax'),
+  ('NJ','New Jersey',0,660,'Generally exempt','Average product total'),
+  ('NM','New Mexico',0,768,'Generally deductible/exempt','Average product total'),
+  ('NY','New York',0,854,'Generally exempt','Average product total'),
+  ('NC','North Carolina',200,710,'Generally 2.00% local','Average product total'),
+  ('ND','North Dakota',0,709,'Generally exempt','Average product total'),
+  ('OH','Ohio',0,729,'Generally exempt','Average product total'),
+  ('OK','Oklahoma',0,906,'Local taxes may apply','Average product total'),
+  ('OR','Oregon',0,0,'No general sales tax','No general sales tax'),
+  ('PA','Pennsylvania',0,634,'Generally exempt','Average product total'),
+  ('RI','Rhode Island',0,700,'No general local tax','Average product total'),
+  ('SC','South Carolina',0,749,'Local taxes may apply','Average product total'),
+  ('SD','South Dakota',420,611,'Local taxes generally apply','Average product total'),
+  ('TN','Tennessee',400,961,'Local taxes generally apply','Average product total'),
+  ('TX','Texas',0,820,'Generally exempt','Average product total'),
+  ('UT','Utah',300,742,'Statewide food rate','Average product total'),
+  ('VT','Vermont',0,643,'Generally exempt','Average product total'),
+  ('VA','Virginia',100,577,'Statewide food rate','Average product total'),
+  ('WA','Washington',0,957,'Generally exempt','Average product total'),
+  ('WV','West Virginia',0,660,'Generally exempt','Average product total'),
+  ('WI','Wisconsin',0,572,'Generally exempt','Average product total'),
+  ('WY','Wyoming',0,539,'Generally exempt','Average product total')
+on conflict (state_code) do update
+set
+  state_name = excluded.state_name,
+  home_bakery_basis_points = excluded.home_bakery_basis_points,
+  general_product_basis_points = excluded.general_product_basis_points,
+  home_bakery_note = excluded.home_bakery_note,
+  general_product_note = excluded.general_product_note;
 
 insert into public.app_settings (key, value)
 values
@@ -204,6 +283,16 @@ add column if not exists image_url text;
 
 alter table public.products
 add column if not exists shippable boolean not null default false;
+
+alter table public.products
+add column if not exists tax_category text not null default 'home_bakery';
+
+alter table public.products
+drop constraint if exists products_tax_category_check;
+
+alter table public.products
+add constraint products_tax_category_check
+check (tax_category in ('home_bakery','general_product'));
 
 alter table public.coupons
 add column if not exists applies_to text not null default 'items';
@@ -376,6 +465,7 @@ drop function if exists public.validate_coupon_code(text,integer,text);
 drop function if exists public.calculate_order_totals(integer,integer,text);
 drop function if exists public.calculate_order_totals(integer,text);
 drop function if exists public.calculate_order_totals(integer,integer,text);
+drop function if exists public.calculate_order_totals(integer,integer,integer,integer,text,text,text);
 drop function if exists public.get_order_invoice(text);
 drop function if exists public.get_sheet_sync_orders(text);
 drop function if exists public.mark_sheet_invoice_sent(text,text);
@@ -391,6 +481,9 @@ drop function if exists public.admin_save_pickup_date(uuid,date,integer,boolean)
 drop function if exists public.admin_list_products();
 drop function if exists public.admin_update_product_active(uuid,boolean);
 drop function if exists public.admin_update_product_flags(uuid,boolean,boolean);
+drop function if exists public.admin_update_product_flags(uuid,boolean,boolean,text);
+drop function if exists public.admin_get_tax_settings();
+drop function if exists public.admin_save_tax_settings(boolean,text);
 drop function if exists public.admin_list_coupons();
 drop function if exists public.admin_save_coupon(text,text,text,text,integer,integer,integer,date,date,integer,boolean);
 drop function if exists public.admin_save_coupon(text,text,text,text,text,integer,integer,integer,date,date,integer,boolean);
@@ -503,9 +596,12 @@ $$;
 
 create or replace function public.calculate_order_totals(
   p_subtotal_cents integer,
+  p_home_bakery_subtotal_cents integer,
+  p_general_product_subtotal_cents integer,
   p_discount_cents integer,
   p_coupon_applies_to text,
-  p_shipping_method text
+  p_shipping_method text,
+  p_tax_state text
 )
 returns table(
   tax_cents integer,
@@ -518,14 +614,22 @@ set search_path = public
 as $$
 declare
   v_subtotal integer;
+  v_home_bakery_subtotal integer;
+  v_general_product_subtotal integer;
   v_discount integer;
   v_coupon_applies_to text;
-  v_taxable_subtotal integer;
-  v_tax_rate_basis_points integer;
+  v_taxable_home_bakery integer;
+  v_taxable_general_product integer;
+  v_home_bakery_basis_points integer := 0;
+  v_general_product_basis_points integer := 0;
   v_shipping_cents integer;
   v_method text;
+  v_tax_enabled boolean := false;
+  v_state text;
 begin
   v_subtotal := greatest(coalesce(p_subtotal_cents, 0), 0);
+  v_home_bakery_subtotal := greatest(coalesce(p_home_bakery_subtotal_cents, 0), 0);
+  v_general_product_subtotal := greatest(coalesce(p_general_product_subtotal_cents, 0), 0);
   v_discount := greatest(coalesce(p_discount_cents, 0), 0);
   v_coupon_applies_to := lower(trim(coalesce(p_coupon_applies_to, 'items')));
   v_method := lower(trim(coalesce(p_shipping_method, 'pickup')));
@@ -534,17 +638,36 @@ begin
     raise exception 'Invalid fulfillment method';
   end if;
 
-  select coalesce(nullif(value, '')::integer, 0)
-  into v_tax_rate_basis_points
+  if v_home_bakery_subtotal + v_general_product_subtotal = 0 and v_subtotal > 0 then
+    v_home_bakery_subtotal := v_subtotal;
+  end if;
+
+  if v_home_bakery_subtotal + v_general_product_subtotal <> v_subtotal then
+    v_subtotal := v_home_bakery_subtotal + v_general_product_subtotal;
+  end if;
+
+  select lower(coalesce(nullif(value, ''), 'false')) in ('true','1','yes','on')
+  into v_tax_enabled
   from public.app_settings
-  where key = 'tax_rate_basis_points';
+  where key = 'tax_enabled';
+
+  v_tax_enabled := coalesce(v_tax_enabled, false);
+
+  v_state := upper(nullif(trim(coalesce(p_tax_state, '')), ''));
+
+  if v_state is null then
+    select upper(nullif(trim(value), ''))
+    into v_state
+    from public.app_settings
+    where key = 'business_state';
+  end if;
+
+  v_state := coalesce(v_state, 'NV');
 
   select coalesce(nullif(value, '')::integer, 0)
   into v_shipping_cents
   from public.app_settings
   where key = 'shipping_flat_cents';
-
-  v_tax_rate_basis_points := greatest(coalesce(v_tax_rate_basis_points, 0), 0);
 
   if v_method <> 'shipping' then
     v_shipping_cents := 0;
@@ -553,20 +676,67 @@ begin
   v_shipping_cents := greatest(coalesce(v_shipping_cents, 0), 0);
   v_discount := least(v_discount, v_subtotal + v_shipping_cents);
 
-  v_taxable_subtotal := case
-    when v_coupon_applies_to in ('items', 'order') then greatest(v_subtotal - least(v_discount, v_subtotal), 0)
-    else v_subtotal
-  end;
+  if v_tax_enabled then
+    select
+      coalesce(home_bakery_basis_points, 0),
+      coalesce(general_product_basis_points, 0)
+    into v_home_bakery_basis_points, v_general_product_basis_points
+    from public.sales_tax_rates
+    where state_code = v_state;
+  end if;
+
+  if v_coupon_applies_to in ('items', 'order') and v_subtotal > 0 then
+    v_taxable_home_bakery := greatest(
+      v_home_bakery_subtotal - round(least(v_discount, v_subtotal) * v_home_bakery_subtotal / v_subtotal::numeric)::integer,
+      0
+    );
+    v_taxable_general_product := greatest(
+      v_general_product_subtotal - round(least(v_discount, v_subtotal) * v_general_product_subtotal / v_subtotal::numeric)::integer,
+      0
+    );
+  else
+    v_taxable_home_bakery := v_home_bakery_subtotal;
+    v_taxable_general_product := v_general_product_subtotal;
+  end if;
 
   return query
   select
-    round(v_taxable_subtotal * v_tax_rate_basis_points / 10000.0)::integer,
+    round(v_taxable_home_bakery * coalesce(v_home_bakery_basis_points, 0) / 10000.0)::integer
+      + round(v_taxable_general_product * coalesce(v_general_product_basis_points, 0) / 10000.0)::integer,
     v_shipping_cents,
     v_subtotal
-      + round(v_taxable_subtotal * v_tax_rate_basis_points / 10000.0)::integer
+      + round(v_taxable_home_bakery * coalesce(v_home_bakery_basis_points, 0) / 10000.0)::integer
+      + round(v_taxable_general_product * coalesce(v_general_product_basis_points, 0) / 10000.0)::integer
       + v_shipping_cents
       - v_discount;
 end;
+$$;
+
+create or replace function public.calculate_order_totals(
+  p_subtotal_cents integer,
+  p_discount_cents integer,
+  p_coupon_applies_to text,
+  p_shipping_method text
+)
+returns table(
+  tax_cents integer,
+  shipping_cents integer,
+  final_total_cents integer
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select *
+  from public.calculate_order_totals(
+    p_subtotal_cents,
+    p_subtotal_cents,
+    0,
+    p_discount_cents,
+    p_coupon_applies_to,
+    p_shipping_method,
+    null
+  );
 $$;
 
 create or replace function public.place_order(
@@ -592,6 +762,8 @@ declare
   v_current integer;
   v_requested integer;
   v_total integer;
+  v_home_bakery_total integer;
+  v_general_product_total integer;
   v_item_count integer;
   v_order_id uuid;
   v_order_code text;
@@ -600,6 +772,7 @@ declare
   v_price integer;
   v_capacity_units integer;
   v_shippable boolean;
+  v_tax_category text;
   v_coupon record;
   v_coupon_code text;
   v_coupon_applies_to text;
@@ -676,6 +849,8 @@ begin
     and fulfillment_status <> 'canceled';
 
   v_total := 0;
+  v_home_bakery_total := 0;
+  v_general_product_total := 0;
   v_item_count := 0;
   v_requested := 0;
 
@@ -684,8 +859,8 @@ begin
   loop
     v_quantity := (v_item->>'quantity')::integer;
 
-    select price_cents, capacity_units, shippable
-    into v_price, v_capacity_units, v_shippable
+    select price_cents, capacity_units, shippable, tax_category
+    into v_price, v_capacity_units, v_shippable, v_tax_category
     from products
     where id = (v_item->>'product_id')::uuid
       and active = true;
@@ -699,6 +874,11 @@ begin
     end if;
 
     v_total := v_total + v_price * v_quantity;
+    if v_tax_category = 'general_product' then
+      v_general_product_total := v_general_product_total + v_price * v_quantity;
+    else
+      v_home_bakery_total := v_home_bakery_total + v_price * v_quantity;
+    end if;
     v_item_count := v_item_count + v_quantity;
     v_requested := v_requested + v_capacity_units * v_quantity;
   end loop;
@@ -729,7 +909,18 @@ begin
 
   select *
   into v_totals
-  from public.calculate_order_totals(v_total, v_discount, v_coupon_applies_to, v_fulfillment_method);
+  from public.calculate_order_totals(
+    v_total,
+    v_home_bakery_total,
+    v_general_product_total,
+    v_discount,
+    v_coupon_applies_to,
+    v_fulfillment_method,
+    case
+      when v_fulfillment_method = 'shipping' then regexp_replace(v_shipping_address, '^.*, ([A-Za-z]{2}) [0-9-]+$', '\1')
+      else null
+    end
+  );
 
   insert into orders (
     pickup_date_id,
@@ -1220,9 +1411,12 @@ declare
   v_existing_loaves integer;
   v_total_loaves integer := greatest(coalesce(p_total_loaves, 0), 0);
   v_subtotal integer := 0;
+  v_home_bakery_subtotal integer := 0;
+  v_general_product_subtotal integer := 0;
   v_totals record;
   v_item jsonb;
   v_item_name text;
+  v_tax_category text;
   v_quantity integer;
   v_unit_price_cents integer;
 begin
@@ -1274,6 +1468,7 @@ begin
   for v_item in select * from jsonb_array_elements(p_items)
   loop
     v_item_name := nullif(trim(coalesce(v_item->>'name', '')), '');
+    v_tax_category := lower(trim(coalesce(v_item->>'tax_category', 'home_bakery')));
     v_quantity := coalesce((v_item->>'quantity')::integer, 0);
     v_unit_price_cents := coalesce((v_item->>'unit_price_cents')::integer, 0);
 
@@ -1289,12 +1484,21 @@ begin
       raise exception 'Item prices cannot be negative';
     end if;
 
+    if v_tax_category not in ('home_bakery','general_product') then
+      raise exception 'Invalid item tax type';
+    end if;
+
     v_subtotal := v_subtotal + (v_quantity * v_unit_price_cents);
+    if v_tax_category = 'general_product' then
+      v_general_product_subtotal := v_general_product_subtotal + (v_quantity * v_unit_price_cents);
+    else
+      v_home_bakery_subtotal := v_home_bakery_subtotal + (v_quantity * v_unit_price_cents);
+    end if;
   end loop;
 
   select *
   into v_totals
-  from public.calculate_order_totals(v_subtotal, 0, null, 'pickup');
+  from public.calculate_order_totals(v_subtotal, v_home_bakery_subtotal, v_general_product_subtotal, 0, null, 'pickup', null);
 
   insert into public.orders (
     pickup_date_id,
@@ -1455,6 +1659,7 @@ returns table(
   option_label text,
   image_url text,
   shippable boolean,
+  tax_category text,
   active boolean,
   sort_order integer
 )
@@ -1479,6 +1684,7 @@ begin
     p.option_label,
     p.image_url,
     p.shippable,
+    p.tax_category,
     p.active,
     p.sort_order
   from public.products p
@@ -1489,9 +1695,10 @@ $$;
 create or replace function public.admin_update_product_flags(
   p_product_id uuid,
   p_active boolean,
-  p_shippable boolean
+  p_shippable boolean,
+  p_tax_category text default 'home_bakery'
 )
-returns table(saved_id uuid, saved_active boolean, saved_shippable boolean)
+returns table(saved_id uuid, saved_active boolean, saved_shippable boolean, saved_tax_category text)
 language plpgsql
 security definer
 set search_path = public
@@ -1501,18 +1708,73 @@ begin
     raise exception 'Admin access required';
   end if;
 
+  if p_tax_category not in ('home_bakery','general_product') then
+    raise exception 'Invalid tax type';
+  end if;
+
   update public.products as p
   set
     active = p_active,
-    shippable = p_shippable
+    shippable = p_shippable,
+    tax_category = p_tax_category
   where p.id = p_product_id
-  returning p.id, p.active, p.shippable into saved_id, saved_active, saved_shippable;
+  returning p.id, p.active, p.shippable, p.tax_category into saved_id, saved_active, saved_shippable, saved_tax_category;
 
   if saved_id is null then
     raise exception 'Product not found';
   end if;
 
   return next;
+end;
+$$;
+
+create or replace function public.admin_get_tax_settings()
+returns table(tax_enabled boolean, business_state text)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Admin access required';
+  end if;
+
+  return query
+  select
+    coalesce((select lower(value) in ('true','1','yes','on') from public.app_settings where key = 'tax_enabled'), false),
+    coalesce((select upper(value) from public.app_settings where key = 'business_state'), 'NV');
+end;
+$$;
+
+create or replace function public.admin_save_tax_settings(
+  p_tax_enabled boolean,
+  p_business_state text
+)
+returns table(tax_enabled boolean, business_state text)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_state text := upper(trim(coalesce(p_business_state, 'NV')));
+begin
+  if not public.is_admin() then
+    raise exception 'Admin access required';
+  end if;
+
+  if not exists (select 1 from public.sales_tax_rates where state_code = v_state) then
+    raise exception 'Unknown state code';
+  end if;
+
+  insert into public.app_settings (key, value)
+  values ('tax_enabled', case when coalesce(p_tax_enabled, false) then 'true' else 'false' end)
+  on conflict (key) do update set value = excluded.value;
+
+  insert into public.app_settings (key, value)
+  values ('business_state', v_state)
+  on conflict (key) do update set value = excluded.value;
+
+  return query select coalesce(p_tax_enabled, false), v_state;
 end;
 $$;
 
@@ -1747,6 +2009,9 @@ grant execute on function public.validate_coupon_code(text,integer,text) to anon
 revoke all on function public.calculate_order_totals(integer,integer,text,text) from public;
 grant execute on function public.calculate_order_totals(integer,integer,text,text) to anon, authenticated;
 
+revoke all on function public.calculate_order_totals(integer,integer,integer,integer,text,text,text) from public;
+grant execute on function public.calculate_order_totals(integer,integer,integer,integer,text,text,text) to anon, authenticated;
+
 revoke all on function public.get_order_invoice(text) from public;
 grant execute on function public.get_order_invoice(text) to anon, authenticated;
 
@@ -1780,8 +2045,14 @@ grant execute on function public.admin_save_pickup_date(uuid,date,integer,boolea
 revoke all on function public.admin_list_products() from public;
 grant execute on function public.admin_list_products() to authenticated;
 
-revoke all on function public.admin_update_product_flags(uuid,boolean,boolean) from public;
-grant execute on function public.admin_update_product_flags(uuid,boolean,boolean) to authenticated;
+revoke all on function public.admin_update_product_flags(uuid,boolean,boolean,text) from public;
+grant execute on function public.admin_update_product_flags(uuid,boolean,boolean,text) to authenticated;
+
+revoke all on function public.admin_get_tax_settings() from public;
+grant execute on function public.admin_get_tax_settings() to authenticated;
+
+revoke all on function public.admin_save_tax_settings(boolean,text) from public;
+grant execute on function public.admin_save_tax_settings(boolean,text) to authenticated;
 
 revoke all on function public.admin_list_coupons() from public;
 grant execute on function public.admin_list_coupons() to authenticated;

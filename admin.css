@@ -288,7 +288,7 @@
 }
 
 .manual-item-row {
-  grid-template-columns: minmax(180px, 1fr) minmax(90px, 0.25fr) minmax(130px, 0.35fr) auto;
+  grid-template-columns: minmax(180px, 1fr) minmax(80px, 0.2fr) minmax(120px, 0.3fr) minmax(150px, 0.35fr) auto;
 }
 
 .manual-items-list {
@@ -307,6 +307,18 @@
 .manual-order-total {
   padding-top: 10px;
   border-top: 1px solid var(--border);
+}
+
+.tax-settings-form {
+  display: grid;
+  grid-template-columns: minmax(170px, auto) minmax(180px, 0.4fr) auto;
+  align-items: end;
+  gap: 12px;
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-soft);
 }
 
 .admin-product-checks {
@@ -435,6 +447,10 @@
   }
 
   .manual-item-row {
+    grid-template-columns: 1fr;
+  }
+
+  .tax-settings-form {
     grid-template-columns: 1fr;
   }
 

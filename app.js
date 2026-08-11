@@ -238,6 +238,13 @@ function discountedSubtotalCents() {
   return Math.max(selectedTotalCents() - discountCents(), 0);
 }
 
+function selectedSubtotalByTaxCategory(taxCategory) {
+  return state.products.reduce((sum, product) => {
+    if ((product.tax_category || "home_bakery") !== taxCategory) return sum;
+    return sum + (state.quantities[product.id] || 0) * product.price_cents;
+  }, 0);
+}
+
 function couponAppliesToLabel(value) {
   return {
     items: "items",
@@ -507,9 +514,12 @@ function updateShippingFields() {
 async function calculateOrderTotals() {
   const { data, error } = await supabaseClient.rpc("calculate_order_totals", {
     p_subtotal_cents: selectedTotalCents(),
+    p_home_bakery_subtotal_cents: selectedSubtotalByTaxCategory("home_bakery"),
+    p_general_product_subtotal_cents: selectedSubtotalByTaxCategory("general_product"),
     p_discount_cents: discountCents(),
     p_coupon_applies_to: state.coupon?.applies_to || null,
-    p_shipping_method: fulfillmentMethod()
+    p_shipping_method: fulfillmentMethod(),
+    p_tax_state: shippingIsSelected() ? cleanText(el.shippingState.value).toUpperCase() : null
   });
 
   if (error) throw error;

@@ -7,7 +7,8 @@ const state = {
   orders: [],
   pickupDates: [],
   products: [],
-  coupons: []
+  coupons: [],
+  taxSettings: null
 };
 
 const el = {
@@ -27,6 +28,9 @@ const el = {
   pickupDatesList: document.querySelector("#pickup-dates-list"),
   productsList: document.querySelector("#products-list"),
   couponsList: document.querySelector("#coupons-list"),
+  taxSettingsForm: document.querySelector("#tax-settings-form"),
+  taxEnabledInput: document.querySelector("#tax-enabled-input"),
+  taxBusinessStateInput: document.querySelector("#tax-business-state-input"),
   includeArchived: document.querySelector("#include-archived"),
   orderPickupFilter: document.querySelector("#order-pickup-filter"),
   orderInvoiceFilter: document.querySelector("#order-invoice-filter"),
@@ -134,7 +138,7 @@ function showLogin() {
 async function showAdmin() {
   el.loginPanel.hidden = true;
   el.adminPageNav.hidden = false;
-  await Promise.all([loadOrders(), loadPickupDates(), loadProducts(), loadCoupons()]);
+  await Promise.all([loadOrders(), loadPickupDates(), loadProducts(), loadCoupons(), loadTaxSettings()]);
   showAdminPage(currentAdminPage());
 }
 
@@ -194,6 +198,7 @@ el.refreshOrders.addEventListener("click", () => {
 });
 
 el.refreshProducts.addEventListener("click", loadProducts);
+el.taxSettingsForm.addEventListener("submit", saveTaxSettings);
 el.refreshCoupons.addEventListener("click", loadCoupons);
 el.couponTypeInput.addEventListener("change", syncCouponTypeFields);
 el.clearCouponForm.addEventListener("click", clearCouponForm);
@@ -256,6 +261,13 @@ function addManualItemRow(item = {}) {
       Price each
       <input data-manual-item-price type="number" min="0" step="0.01" required value="${item.priceCents ? centsToDollars(item.priceCents) : ""}" placeholder="0.00" />
     </label>
+    <label>
+      Tax type
+      <select data-manual-item-tax-category>
+        ${option("home_bakery", "Home bakery food", item.taxCategory || "home_bakery")}
+        ${option("general_product", "General product", item.taxCategory || "home_bakery")}
+      </select>
+    </label>
     <button class="secondary-button compact-button" type="button" data-remove-manual-item>Remove</button>
   `;
   el.manualItemsList.append(row);
@@ -267,7 +279,8 @@ function manualOrderItems() {
     .map(row => ({
       name: row.querySelector("[data-manual-item-name]").value.trim(),
       quantity: Number(row.querySelector("[data-manual-item-quantity]").value || 0),
-      unit_price_cents: dollarsToCents(row.querySelector("[data-manual-item-price]").value)
+      unit_price_cents: dollarsToCents(row.querySelector("[data-manual-item-price]").value),
+      tax_category: row.querySelector("[data-manual-item-tax-category]").value
     }))
     .filter(item => item.name || item.quantity || item.unit_price_cents);
 }
@@ -670,6 +683,38 @@ async function loadProducts() {
   setMessage(el.productAdminMessage, `${state.products.length} product${state.products.length === 1 ? "" : "s"} shown.`, "success");
 }
 
+async function loadTaxSettings() {
+  const { data, error } = await supabaseClient.rpc("admin_get_tax_settings");
+
+  if (error) {
+    setMessage(el.productAdminMessage, error.message, "error");
+    return;
+  }
+
+  const settings = Array.isArray(data) ? data[0] : data;
+  state.taxSettings = settings;
+  el.taxEnabledInput.checked = Boolean(settings?.tax_enabled);
+  el.taxBusinessStateInput.value = settings?.business_state || "NV";
+}
+
+async function saveTaxSettings(event) {
+  event.preventDefault();
+  setMessage(el.productAdminMessage, "Saving tax settings...");
+
+  const { error } = await supabaseClient.rpc("admin_save_tax_settings", {
+    p_tax_enabled: el.taxEnabledInput.checked,
+    p_business_state: el.taxBusinessStateInput.value
+  });
+
+  if (error) {
+    setMessage(el.productAdminMessage, error.message, "error");
+    return;
+  }
+
+  setMessage(el.productAdminMessage, "Tax settings saved.", "success");
+  await loadTaxSettings();
+}
+
 function renderProducts() {
   if (!state.products.length) {
     el.productsList.innerHTML = "<p class=\"muted\">No products to show.</p>";
@@ -695,6 +740,7 @@ function renderProducts() {
                 ${money(product.price_cents)}
                 ${product.capacity_units > 0 ? "- counts toward loaf capacity" : "- add-on item"}
                 ${product.shippable ? "- can ship" : "- pickup only"}
+                - ${taxCategoryLabel(product.tax_category)}
               </p>
             </div>
             <div class="admin-product-checks">
@@ -706,6 +752,13 @@ function renderProducts() {
                 <span>Can ship</span>
                 <input type="checkbox" data-product-shippable ${product.shippable ? "checked" : ""} />
               </label>
+              <label>
+                Tax type
+                <select data-product-tax-category data-previous-value="${product.tax_category || "home_bakery"}">
+                  ${option("home_bakery", "Home bakery food", product.tax_category || "home_bakery")}
+                  ${option("general_product", "General product", product.tax_category || "home_bakery")}
+                </select>
+              </label>
             </div>
           </article>
         `).join("")}
@@ -713,7 +766,7 @@ function renderProducts() {
     </section>
   `).join("");
 
-  el.productsList.querySelectorAll("[data-product-active], [data-product-shippable]").forEach(input => {
+  el.productsList.querySelectorAll("[data-product-active], [data-product-shippable], [data-product-tax-category]").forEach(input => {
     input.addEventListener("change", saveProductFlags);
   });
 }
@@ -721,7 +774,7 @@ function renderProducts() {
 async function saveProductFlags(event) {
   const input = event.currentTarget;
   const row = input.closest("[data-product-id]");
-  const previousValue = !input.checked;
+  const previousValue = input.type === "checkbox" ? !input.checked : input.dataset.previousValue;
 
   input.disabled = true;
   setMessage(el.productAdminMessage, "Saving product settings...");
@@ -729,17 +782,25 @@ async function saveProductFlags(event) {
   const { error } = await supabaseClient.rpc("admin_update_product_flags", {
     p_product_id: row.dataset.productId,
     p_active: row.querySelector("[data-product-active]").checked,
-    p_shippable: row.querySelector("[data-product-shippable]").checked
+    p_shippable: row.querySelector("[data-product-shippable]").checked,
+    p_tax_category: row.querySelector("[data-product-tax-category]").value
   });
 
   input.disabled = false;
 
   if (error) {
-    input.checked = previousValue;
+    if (input.type === "checkbox") {
+      input.checked = previousValue;
+    } else {
+      input.value = previousValue || "home_bakery";
+    }
     setMessage(el.productAdminMessage, error.message, "error");
     return;
   }
 
+  if (input.tagName === "SELECT") {
+    input.dataset.previousValue = input.value;
+  }
   row.classList.toggle("is-inactive", !row.querySelector("[data-product-active]").checked);
   setMessage(el.productAdminMessage, "Product settings saved.", "success");
   await loadProducts();
@@ -764,6 +825,10 @@ function couponAppliesToLabel(value) {
     shipping: "shipping",
     order: "whole order"
   }[value] || "items";
+}
+
+function taxCategoryLabel(value) {
+  return value === "general_product" ? "general product tax" : "home bakery tax";
 }
 
 function couponDateRange(coupon) {
