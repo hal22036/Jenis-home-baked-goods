@@ -31,6 +31,20 @@ const el = {
   orderPickupFilter: document.querySelector("#order-pickup-filter"),
   orderInvoiceFilter: document.querySelector("#order-invoice-filter"),
   clearOrderFilters: document.querySelector("#clear-order-filters"),
+  manualOrderForm: document.querySelector("#manual-order-form"),
+  manualPickupDate: document.querySelector("#manual-pickup-date"),
+  manualCustomerName: document.querySelector("#manual-customer-name"),
+  manualCustomerPhone: document.querySelector("#manual-customer-phone"),
+  manualCustomerEmail: document.querySelector("#manual-customer-email"),
+  manualPaymentMethod: document.querySelector("#manual-payment-method"),
+  manualPaymentStatus: document.querySelector("#manual-payment-status"),
+  manualFulfillmentStatus: document.querySelector("#manual-fulfillment-status"),
+  manualTotalLoaves: document.querySelector("#manual-total-loaves"),
+  manualNotes: document.querySelector("#manual-notes"),
+  addManualItem: document.querySelector("#add-manual-item"),
+  manualItemsList: document.querySelector("#manual-items-list"),
+  manualOrderSubtotal: document.querySelector("#manual-order-subtotal"),
+  manualOrderMessage: document.querySelector("#manual-order-message"),
   refreshOrders: document.querySelector("#refresh-orders"),
   refreshProducts: document.querySelector("#refresh-products"),
   refreshCoupons: document.querySelector("#refresh-coupons"),
@@ -192,6 +206,131 @@ el.clearOrderFilters.addEventListener("click", () => {
   el.orderInvoiceFilter.value = "all";
   renderOrders();
 });
+el.addManualItem.addEventListener("click", () => addManualItemRow());
+el.manualItemsList.addEventListener("input", updateManualOrderSubtotal);
+el.manualItemsList.addEventListener("click", event => {
+  const button = event.target.closest("[data-remove-manual-item]");
+  if (!button) return;
+
+  button.closest(".manual-item-row").remove();
+  if (!el.manualItemsList.querySelector(".manual-item-row")) {
+    addManualItemRow();
+  }
+  updateManualOrderSubtotal();
+});
+el.manualOrderForm.addEventListener("submit", saveManualOrder);
+
+function renderManualOrderDateOptions() {
+  if (!el.manualPickupDate) return;
+
+  const selected = el.manualPickupDate.value;
+  el.manualPickupDate.innerHTML = `
+    <option value="">Choose order date</option>
+    ${state.pickupDates.map(date => `
+      <option value="${date.id}">${prettyDate(date.pickup_date)}${date.is_open ? "" : " (closed)"}</option>
+    `).join("")}
+  `;
+
+  if (selected && state.pickupDates.some(date => date.id === selected)) {
+    el.manualPickupDate.value = selected;
+  }
+
+  if (!el.manualItemsList.querySelector(".manual-item-row")) {
+    addManualItemRow();
+  }
+}
+
+function addManualItemRow(item = {}) {
+  const row = document.createElement("div");
+  row.className = "manual-item-row";
+  row.innerHTML = `
+    <label>
+      Item
+      <input data-manual-item-name required placeholder="Classic White" value="${escapeAttribute(item.name || "")}" />
+    </label>
+    <label>
+      Qty
+      <input data-manual-item-quantity type="number" min="1" step="1" required value="${item.quantity || 1}" />
+    </label>
+    <label>
+      Price each
+      <input data-manual-item-price type="number" min="0" step="0.01" required value="${item.priceCents ? centsToDollars(item.priceCents) : ""}" placeholder="0.00" />
+    </label>
+    <button class="secondary-button compact-button" type="button" data-remove-manual-item>Remove</button>
+  `;
+  el.manualItemsList.append(row);
+  updateManualOrderSubtotal();
+}
+
+function manualOrderItems() {
+  return [...el.manualItemsList.querySelectorAll(".manual-item-row")]
+    .map(row => ({
+      name: row.querySelector("[data-manual-item-name]").value.trim(),
+      quantity: Number(row.querySelector("[data-manual-item-quantity]").value || 0),
+      unit_price_cents: dollarsToCents(row.querySelector("[data-manual-item-price]").value)
+    }))
+    .filter(item => item.name || item.quantity || item.unit_price_cents);
+}
+
+function updateManualOrderSubtotal() {
+  const subtotal = manualOrderItems().reduce(
+    (sum, item) => sum + (Number(item.quantity || 0) * Number(item.unit_price_cents || 0)),
+    0
+  );
+  el.manualOrderSubtotal.textContent = money(subtotal);
+}
+
+function clearManualOrderForm() {
+  const selectedDate = el.manualPickupDate.value;
+  el.manualOrderForm.reset();
+  el.manualPickupDate.value = selectedDate;
+  el.manualItemsList.innerHTML = "";
+  addManualItemRow();
+  updateManualOrderSubtotal();
+}
+
+async function saveManualOrder(event) {
+  event.preventDefault();
+
+  const items = manualOrderItems();
+  const invalidItem = items.find(item =>
+    !item.name || item.quantity <= 0 || item.unit_price_cents < 0
+  );
+
+  if (!items.length || invalidItem) {
+    setMessage(el.manualOrderMessage, "Add at least one item with a name, quantity, and price.", "error");
+    return;
+  }
+
+  const submitButton = el.manualOrderForm.querySelector("button[type='submit']");
+  submitButton.disabled = true;
+  setMessage(el.manualOrderMessage, "Saving in-person order...");
+
+  const { data, error } = await supabaseClient.rpc("admin_create_manual_order", {
+    p_pickup_date_id: el.manualPickupDate.value,
+    p_customer_name: el.manualCustomerName.value.trim(),
+    p_customer_email: el.manualCustomerEmail.value.trim() || null,
+    p_customer_phone: el.manualCustomerPhone.value.trim(),
+    p_notes: el.manualNotes.value.trim(),
+    p_payment_method: el.manualPaymentMethod.value,
+    p_payment_status: el.manualPaymentStatus.value,
+    p_fulfillment_status: el.manualFulfillmentStatus.value,
+    p_total_loaves: Number(el.manualTotalLoaves.value || 0),
+    p_items: items
+  });
+
+  submitButton.disabled = false;
+
+  if (error) {
+    setMessage(el.manualOrderMessage, error.message, "error");
+    return;
+  }
+
+  const savedOrder = Array.isArray(data) ? data[0] : data;
+  clearManualOrderForm();
+  setMessage(el.manualOrderMessage, `Saved order ${savedOrder?.order_code || ""}.`, "success");
+  await Promise.all([loadOrders(), loadPickupDates()]);
+}
 
 async function loadOrders() {
   setMessage(el.adminMessage, "Loading orders...");
@@ -513,6 +652,7 @@ async function loadPickupDates() {
 
   state.pickupDates = data || [];
   renderPickupDates();
+  renderManualOrderDateOptions();
 }
 
 async function loadProducts() {

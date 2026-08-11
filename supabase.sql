@@ -71,7 +71,8 @@ create table if not exists public.orders (
 create table if not exists public.order_items (
   id uuid primary key default gen_random_uuid(),
   order_id uuid not null references public.orders(id) on delete cascade,
-  product_id uuid not null references public.products(id),
+  product_id uuid references public.products(id),
+  custom_name text,
   quantity integer not null check (quantity > 0),
   unit_price_cents integer not null check (unit_price_cents >= 0)
 );
@@ -105,6 +106,19 @@ on public.orders (pickup_date_id);
 
 create index if not exists idx_order_items_order_id
 on public.order_items (order_id);
+
+alter table public.order_items
+alter column product_id drop not null;
+
+alter table public.order_items
+add column if not exists custom_name text;
+
+alter table public.order_items
+drop constraint if exists order_items_product_or_custom_check;
+
+alter table public.order_items
+add constraint order_items_product_or_custom_check
+check (product_id is not null or nullif(trim(coalesce(custom_name, '')), '') is not null);
 
 alter table public.orders
 add column if not exists payment_status text not null default 'pending';
@@ -371,6 +385,7 @@ drop function if exists public.admin_list_orders(boolean);
 drop function if exists public.admin_update_order_status(uuid,text,text,boolean);
 drop function if exists public.admin_update_order_status(uuid,text,text,boolean,boolean);
 drop function if exists public.admin_update_order_status(uuid,text,text,boolean,boolean,boolean,text);
+drop function if exists public.admin_create_manual_order(uuid,text,text,text,text,text,text,text,integer,jsonb);
 drop function if exists public.admin_list_pickup_dates();
 drop function if exists public.admin_save_pickup_date(uuid,date,integer,boolean);
 drop function if exists public.admin_list_products();
@@ -870,7 +885,7 @@ begin
     coalesce(
       jsonb_agg(
         jsonb_build_object(
-          'name', p.name,
+          'name', coalesce(oi.custom_name, p.name),
           'quantity', oi.quantity,
           'unit_price_cents', oi.unit_price_cents,
           'display_group', p.display_group,
@@ -878,7 +893,7 @@ begin
           'image_url', p.image_url,
           'shippable', p.shippable
         )
-        order by coalesce(p.display_group, p.name), p.sort_order, coalesce(p.option_label, p.name), p.name
+        order by coalesce(p.display_group, oi.custom_name, p.name), p.sort_order, coalesce(p.option_label, oi.custom_name, p.name), p.name
       ) filter (where oi.id is not null),
       '[]'::jsonb
     ) as items
@@ -964,6 +979,8 @@ begin
         jsonb_build_object(
           'product_name',
             case
+              when oi.custom_name is not null
+                then oi.custom_name
               when p.display_group is not null and p.option_label is not null
                 then p.display_group || ' - ' || p.option_label
               else p.name
@@ -971,7 +988,7 @@ begin
           'quantity', oi.quantity,
           'unit_price_cents', oi.unit_price_cents
         )
-        order by coalesce(p.display_group, p.name), coalesce(p.option_label, p.name), p.name
+        order by coalesce(p.display_group, oi.custom_name, p.name), coalesce(p.option_label, oi.custom_name, p.name), p.name
       ) filter (where oi.id is not null),
       '[]'::jsonb
     ) as items
@@ -1088,16 +1105,16 @@ begin
     coalesce(
       jsonb_agg(
         jsonb_build_object(
-          'name', p.name,
+          'name', coalesce(oi.custom_name, p.name),
           'quantity', oi.quantity,
           'unit_price_cents', oi.unit_price_cents,
-          'capacity_units', p.capacity_units,
+          'capacity_units', coalesce(p.capacity_units, 0),
           'category', p.category,
           'display_group', p.display_group,
           'option_label', p.option_label,
           'shippable', p.shippable
         )
-        order by coalesce(p.display_group, p.name), coalesce(p.option_label, p.name), p.name
+        order by coalesce(p.display_group, oi.custom_name, p.name), coalesce(p.option_label, oi.custom_name, p.name), p.name
       ) filter (where oi.id is not null),
       '[]'::jsonb
     ) as items
@@ -1176,6 +1193,169 @@ begin
     o.customer_email
   from orders o
   where o.id = p_order_id;
+end;
+$$;
+
+create or replace function public.admin_create_manual_order(
+  p_pickup_date_id uuid,
+  p_customer_name text,
+  p_customer_email text,
+  p_customer_phone text,
+  p_notes text,
+  p_payment_method text,
+  p_payment_status text,
+  p_fulfillment_status text,
+  p_total_loaves integer,
+  p_items jsonb
+)
+returns table(order_id uuid, order_code text, total_cents integer)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_order_id uuid;
+  v_order_code text;
+  v_capacity integer;
+  v_existing_loaves integer;
+  v_total_loaves integer := greatest(coalesce(p_total_loaves, 0), 0);
+  v_subtotal integer := 0;
+  v_totals record;
+  v_item jsonb;
+  v_item_name text;
+  v_quantity integer;
+  v_unit_price_cents integer;
+begin
+  if not public.is_admin() then
+    raise exception 'Admin access required';
+  end if;
+
+  if nullif(trim(coalesce(p_customer_name, '')), '') is null then
+    raise exception 'Customer name is required';
+  end if;
+
+  if p_payment_method not in ('Venmo','Zelle','PayPal','CashApp','CashAtPickup') then
+    raise exception 'Invalid payment method';
+  end if;
+
+  if p_payment_status not in ('pending','paid','refunded') then
+    raise exception 'Invalid payment status';
+  end if;
+
+  if p_fulfillment_status not in ('new','prepping','ready','fulfilled','canceled') then
+    raise exception 'Invalid fulfillment status';
+  end if;
+
+  if coalesce(jsonb_typeof(p_items), '') <> 'array' or jsonb_array_length(p_items) = 0 then
+    raise exception 'Add at least one order item';
+  end if;
+
+  select capacity
+  into v_capacity
+  from public.pickup_dates
+  where id = p_pickup_date_id
+  for update;
+
+  if v_capacity is null then
+    raise exception 'Pickup date not found';
+  end if;
+
+  select coalesce(sum(total_loaves), 0)
+  into v_existing_loaves
+  from public.orders
+  where pickup_date_id = p_pickup_date_id
+    and fulfillment_status <> 'canceled';
+
+  if p_fulfillment_status <> 'canceled'
+    and v_existing_loaves + v_total_loaves > v_capacity then
+    raise exception 'This pickup date only has % loaf spots left', greatest(v_capacity - v_existing_loaves, 0);
+  end if;
+
+  for v_item in select * from jsonb_array_elements(p_items)
+  loop
+    v_item_name := nullif(trim(coalesce(v_item->>'name', '')), '');
+    v_quantity := coalesce((v_item->>'quantity')::integer, 0);
+    v_unit_price_cents := coalesce((v_item->>'unit_price_cents')::integer, 0);
+
+    if v_item_name is null then
+      raise exception 'Each item needs a name';
+    end if;
+
+    if v_quantity <= 0 then
+      raise exception 'Each item quantity must be at least 1';
+    end if;
+
+    if v_unit_price_cents < 0 then
+      raise exception 'Item prices cannot be negative';
+    end if;
+
+    v_subtotal := v_subtotal + (v_quantity * v_unit_price_cents);
+  end loop;
+
+  select *
+  into v_totals
+  from public.calculate_order_totals(v_subtotal, 0, null, 'pickup');
+
+  insert into public.orders (
+    pickup_date_id,
+    customer_name,
+    customer_email,
+    customer_phone,
+    notes,
+    payment_method,
+    payment_status,
+    fulfillment_status,
+    subtotal_cents,
+    discount_cents,
+    tax_cents,
+    shipping_cents,
+    total_cents,
+    total_loaves,
+    fulfillment_method,
+    invoice_requested,
+    invoice_sent
+  )
+  values (
+    p_pickup_date_id,
+    trim(p_customer_name),
+    nullif(trim(coalesce(p_customer_email, '')), ''),
+    trim(coalesce(p_customer_phone, '')),
+    nullif(trim(coalesce(p_notes, '')), ''),
+    p_payment_method,
+    p_payment_status,
+    p_fulfillment_status,
+    v_subtotal,
+    0,
+    v_totals.tax_cents,
+    0,
+    v_totals.final_total_cents,
+    v_total_loaves,
+    'pickup',
+    false,
+    false
+  )
+  returning orders.id, orders.order_code
+  into v_order_id, v_order_code;
+
+  for v_item in select * from jsonb_array_elements(p_items)
+  loop
+    insert into public.order_items (
+      order_id,
+      product_id,
+      custom_name,
+      quantity,
+      unit_price_cents
+    )
+    values (
+      v_order_id,
+      null,
+      trim(v_item->>'name'),
+      (v_item->>'quantity')::integer,
+      (v_item->>'unit_price_cents')::integer
+    );
+  end loop;
+
+  return query select v_order_id, v_order_code, v_totals.final_total_cents;
 end;
 $$;
 
@@ -1587,6 +1767,9 @@ grant execute on function public.admin_list_orders(boolean) to authenticated;
 
 revoke all on function public.admin_update_order_status(uuid,text,text,boolean,boolean,boolean,text) from public;
 grant execute on function public.admin_update_order_status(uuid,text,text,boolean,boolean,boolean,text) to authenticated;
+
+revoke all on function public.admin_create_manual_order(uuid,text,text,text,text,text,text,text,integer,jsonb) from public;
+grant execute on function public.admin_create_manual_order(uuid,text,text,text,text,text,text,text,integer,jsonb) to authenticated;
 
 revoke all on function public.admin_list_pickup_dates() from public;
 grant execute on function public.admin_list_pickup_dates() to authenticated;

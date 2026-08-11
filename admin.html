@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bakery Admin | Jeni's Home Baked Goods</title>
   <link rel="stylesheet" href="styles.css?v=20260810-admin-pages" />
-  <link rel="stylesheet" href="admin.css?v=20260810-baking-breakdown" />
+  <link rel="stylesheet" href="admin.css?v=20260810-manual-orders" />
 </head>
 <body>
   <header class="site-header admin-header">
@@ -76,6 +76,76 @@
         </label>
         <button class="secondary-button compact-button" type="button" id="clear-order-filters">Clear filters</button>
       </div>
+      <details class="manual-order-box">
+        <summary>Add in-person order</summary>
+        <form id="manual-order-form" class="manual-order-form">
+          <div class="manual-order-grid">
+            <label>
+              Order date
+              <select id="manual-pickup-date" required></select>
+            </label>
+            <label>
+              Customer name
+              <input id="manual-customer-name" required placeholder="Customer name" />
+            </label>
+            <label>
+              Phone
+              <input id="manual-customer-phone" autocomplete="tel" placeholder="Optional" />
+            </label>
+            <label>
+              Email
+              <input id="manual-customer-email" type="email" autocomplete="email" placeholder="Optional" />
+            </label>
+            <label>
+              Payment method
+              <select id="manual-payment-method">
+                <option value="CashAtPickup">Cash</option>
+                <option value="Venmo">Venmo</option>
+                <option value="Zelle">Zelle</option>
+                <option value="PayPal">PayPal</option>
+                <option value="CashApp">CashApp</option>
+              </select>
+            </label>
+            <label>
+              Payment status
+              <select id="manual-payment-status">
+                <option value="paid">Paid</option>
+                <option value="pending">Pending</option>
+                <option value="refunded">Refunded</option>
+              </select>
+            </label>
+            <label>
+              Fulfillment
+              <select id="manual-fulfillment-status">
+                <option value="new">New</option>
+                <option value="prepping">Prepping</option>
+                <option value="ready">Ready</option>
+                <option value="fulfilled">Fulfilled</option>
+                <option value="canceled">Canceled</option>
+              </select>
+            </label>
+            <label>
+              Loaf spots
+              <input id="manual-total-loaves" type="number" min="0" value="0" />
+            </label>
+          </div>
+          <label>
+            Notes
+            <textarea id="manual-notes" rows="3" placeholder="Pickup notes, special instructions, or payment details"></textarea>
+          </label>
+          <div class="manual-items-heading">
+            <strong>Items</strong>
+            <button class="secondary-button compact-button" type="button" id="add-manual-item">Add item</button>
+          </div>
+          <div id="manual-items-list" class="manual-items-list"></div>
+          <div class="manual-order-total">
+            <span>Subtotal</span>
+            <strong id="manual-order-subtotal">$0.00</strong>
+          </div>
+          <button type="submit">Save in-person order</button>
+          <p id="manual-order-message" class="message" role="status"></p>
+        </form>
+      </details>
       <p id="admin-message" class="message" role="status"></p>
       <div id="orders-list" class="orders-list"></div>
     </section>
@@ -195,6 +265,6 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="admin.js?v=20260810-baking-breakdown"></script>
+  <script src="admin.js?v=20260810-manual-orders"></script>
 </body>
 </html>
