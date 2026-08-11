@@ -630,14 +630,19 @@ function bakingBreakdownMarkup(orders) {
 
 function orderCardMarkup(order) {
   return `
-    <article class="admin-order ${order.archived ? "is-archived" : ""}" data-order-id="${order.order_id}">
-      <div class="order-heading">
+    <details class="admin-order ${order.archived ? "is-archived" : ""}" data-order-id="${order.order_id}">
+      <summary class="order-summary">
         <div>
-          <h3>${order.order_code}</h3>
-          <p>${prettyDate(order.pickup_date)} · ${order.customer_name}</p>
+          <h3>${order.customer_name}</h3>
+          <p>${prettyDate(order.pickup_date)} &middot; ${order.order_code}</p>
         </div>
-        <strong>${money(order.total_cents)}</strong>
-      </div>
+        <div class="order-summary-meta">
+          <span>${paymentLabel(order.payment_method)} &middot; ${statusLabel(order.fulfillment_status)}</span>
+          <strong>${money(order.total_cents)}</strong>
+        </div>
+      </summary>
+
+      <div class="order-body">
 
       <dl class="admin-details">
         <div><dt>Order placed</dt><dd>${prettyDateTime(order.created_at)}</dd></div>
@@ -713,7 +718,8 @@ function orderCardMarkup(order) {
         </button>
       </div>
       <p class="message" data-order-message></p>
-    </article>
+      </div>
+    </details>
   `;
 }
 

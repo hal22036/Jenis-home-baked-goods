@@ -146,6 +146,15 @@
   opacity: 0.72;
 }
 
+.admin-order summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.admin-order summary::-webkit-details-marker {
+  display: none;
+}
+
 .admin-product-category {
   display: grid;
   gap: 10px;
@@ -201,6 +210,7 @@
 }
 
 .order-heading,
+.order-summary,
 .pickup-date-row,
 .admin-product-row,
 .coupon-row,
@@ -215,11 +225,55 @@
   margin-bottom: 4px;
 }
 
+.order-summary {
+  align-items: center;
+}
+
+.order-summary::before {
+  content: "+";
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--accent-dark);
+  font-size: 1.25rem;
+  font-weight: 900;
+}
+
+.admin-order[open] .order-summary::before {
+  content: "-";
+}
+
+.order-summary h3 {
+  margin-bottom: 4px;
+}
+
 .order-heading p,
+.order-summary p,
 .pickup-date-row p,
 .admin-product-row p {
   margin: 0;
   color: var(--muted);
+}
+
+.order-summary-meta {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+  margin-left: auto;
+  text-align: right;
+}
+
+.order-summary-meta span {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.order-body {
+  padding-top: 14px;
 }
 
 .admin-details {
@@ -497,10 +551,23 @@
   .admin-product-row,
   .coupon-row,
   .order-heading,
+  .order-summary,
   .admin-items div,
   .manual-items-heading,
   .manual-order-total {
     display: grid;
+  }
+
+  .order-summary {
+    grid-template-columns: auto 1fr;
+    align-items: center;
+  }
+
+  .order-summary-meta {
+    grid-column: 2;
+    justify-items: start;
+    margin-left: 0;
+    text-align: left;
   }
 
   .manual-item-row {
