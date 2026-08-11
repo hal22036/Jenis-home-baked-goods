@@ -275,21 +275,24 @@ function addManualItemRow(item = {}) {
       Qty
       <input data-manual-item-quantity type="number" min="1" step="1" required value="${item.quantity || 1}" />
     </label>
-    <label>
-      Price each
-      <input data-manual-item-price type="number" min="0" step="0.01" required placeholder="0.00" />
-    </label>
-    <label>
-      Tax type
-      <select data-manual-item-tax-category>
-        ${option("home_bakery", "Home bakery food", item.taxCategory || "home_bakery")}
-        ${option("general_product", "General product", item.taxCategory || "home_bakery")}
-      </select>
-    </label>
-    <label>
-      Loaf spots each
-      <input data-manual-item-loaf-spots type="number" min="0" step="1" value="${item.loafSpots ?? 0}" />
-    </label>
+    <div class="manual-product-details" data-manual-product-details hidden></div>
+    <div class="manual-custom-controls">
+      <label>
+        Price each
+        <input data-manual-item-price type="number" min="0" step="0.01" required placeholder="0.00" />
+      </label>
+      <label>
+        Tax type
+        <select data-manual-item-tax-category>
+          ${option("home_bakery", "Home bakery food", item.taxCategory || "home_bakery")}
+          ${option("general_product", "General product", item.taxCategory || "home_bakery")}
+        </select>
+      </label>
+      <label>
+        Loaf spots each
+        <input data-manual-item-loaf-spots type="number" min="0" step="1" value="${item.loafSpots ?? 0}" />
+      </label>
+    </div>
     <button class="secondary-button compact-button" type="button" data-remove-manual-item>Remove</button>
   `;
   el.manualItemsList.append(row);
@@ -334,20 +337,27 @@ function syncManualItemRow(row) {
   const priceInput = row.querySelector("[data-manual-item-price]");
   const taxCategory = row.querySelector("[data-manual-item-tax-category]");
   const loafSpots = row.querySelector("[data-manual-item-loaf-spots]");
+  const customControls = row.querySelector(".manual-custom-controls");
+  const productDetails = row.querySelector("[data-manual-product-details]");
   const product = productById(productSelect.value);
   const isOther = productSelect.value === "other";
   const previousProductId = row.dataset.selectedProductId || "";
 
   customField.hidden = !isOther;
+  customControls.hidden = !isOther;
+  productDetails.hidden = !product;
   customName.required = isOther;
-  priceInput.readOnly = Boolean(product);
-  taxCategory.disabled = Boolean(product);
-  loafSpots.readOnly = Boolean(product);
+  priceInput.required = isOther;
 
   if (product) {
     priceInput.value = centsToDollars(product.price_cents);
     taxCategory.value = product.tax_category || "home_bakery";
     loafSpots.value = product.capacity_units || 0;
+    productDetails.innerHTML = `
+      <span>Price each: <strong>${money(product.price_cents)}</strong></span>
+      <span>Loaf spots each: <strong>${product.capacity_units || 0}</strong></span>
+      <span>${taxCategoryLabel(product.tax_category)}</span>
+    `;
   } else if (isOther && previousProductId && previousProductId !== "other") {
     priceInput.value = "";
     taxCategory.value = "home_bakery";
