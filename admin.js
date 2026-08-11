@@ -741,6 +741,13 @@ function fulfillmentLabel(value) {
   return value === "shipping" ? "Shipping" : "Pickup";
 }
 
+function statusLabel(value) {
+  return String(value || "")
+    .split("_")
+    .map(word => word ? word[0].toUpperCase() + word.slice(1) : "")
+    .join(" ");
+}
+
 function adminItemName(item) {
   if (item.display_group && item.option_label) {
     return `${item.display_group} - ${item.option_label}`;
