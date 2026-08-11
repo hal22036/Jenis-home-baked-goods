@@ -157,9 +157,6 @@
 }
 
 .baking-breakdown {
-  display: grid;
-  grid-template-columns: minmax(180px, 0.35fr) minmax(0, 1fr);
-  gap: 14px;
   margin-bottom: 14px;
   padding: 14px;
   border: 1px solid #e0b96f;
@@ -178,23 +175,29 @@
   color: var(--muted);
 }
 
-.baking-items {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 8px 12px;
-}
-
-.baking-items div {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 10px;
-  border-radius: 6px;
+.baking-breakdown-table {
+  width: 100%;
+  border-collapse: collapse;
   background: #fffdf9;
 }
 
-.baking-items strong {
+.baking-breakdown-table th,
+.baking-breakdown-table td {
+  padding: 8px 10px;
+  border-top: 1px solid #ead9b9;
+  text-align: left;
+}
+
+.baking-breakdown-table th {
   color: #4a260b;
+  font-size: 0.9rem;
+}
+
+.baking-breakdown-table th:last-child,
+.baking-breakdown-table td:last-child {
+  width: 72px;
+  text-align: right;
+  font-weight: 800;
 }
 
 .order-heading,
@@ -393,10 +396,6 @@
 
   .order-date-heading {
     display: grid;
-  }
-
-  .baking-breakdown {
-    grid-template-columns: 1fr;
   }
 
   .receipt-email-field {

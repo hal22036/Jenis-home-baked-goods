@@ -306,30 +306,31 @@ function bakingBreakdownMarkup(orders) {
   if (!items.length) {
     return `
       <aside class="baking-breakdown">
-        <div>
-          <h4>Baking breakdown</h4>
-          <p>No active items to bake for this date.</p>
-        </div>
+        <h4>Active Orders Breakdown</h4>
+        <p>No active items to bake for this date.</p>
       </aside>
     `;
   }
 
-  const totalItems = items.reduce((total, [, quantity]) => total + quantity, 0);
-
   return `
     <aside class="baking-breakdown">
-      <div>
-        <h4>Baking breakdown</h4>
-        <p>${totalItems} item${totalItems === 1 ? "" : "s"} from active orders</p>
-      </div>
-      <div class="baking-items">
-        ${items.map(([name, quantity]) => `
-          <div>
-            <span>${escapeHtml(name)}</span>
-            <strong>${quantity}</strong>
-          </div>
-        `).join("")}
-      </div>
+      <h4>Active Orders Breakdown</h4>
+      <table class="baking-breakdown-table">
+        <thead>
+          <tr>
+            <th scope="col">Item</th>
+            <th scope="col">Qty</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map(([name, quantity]) => `
+            <tr>
+              <td>${escapeHtml(name)}</td>
+              <td>${quantity}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
     </aside>
   `;
 }
