@@ -1412,6 +1412,7 @@ declare
   v_capacity integer;
   v_existing_loaves integer;
   v_total_loaves integer := greatest(coalesce(p_total_loaves, 0), 0);
+  v_calculated_loaves integer := 0;
   v_subtotal integer := 0;
   v_home_bakery_subtotal integer := 0;
   v_general_product_subtotal integer := 0;
@@ -1422,6 +1423,7 @@ declare
   v_tax_category text;
   v_quantity integer;
   v_unit_price_cents integer;
+  v_item_loaf_spots integer;
 begin
   if not public.is_admin() then
     raise exception 'Admin access required';
@@ -1463,17 +1465,13 @@ begin
   where pickup_date_id = p_pickup_date_id
     and fulfillment_status <> 'canceled';
 
-  if p_fulfillment_status <> 'canceled'
-    and v_existing_loaves + v_total_loaves > v_capacity then
-    raise exception 'This pickup date only has % loaf spots left', greatest(v_capacity - v_existing_loaves, 0);
-  end if;
-
   for v_item in select * from jsonb_array_elements(p_items)
   loop
     v_item_name := nullif(trim(coalesce(v_item->>'name', '')), '');
     v_tax_category := lower(trim(coalesce(v_item->>'tax_category', 'home_bakery')));
     v_quantity := coalesce((v_item->>'quantity')::integer, 0);
     v_unit_price_cents := coalesce((v_item->>'unit_price_cents')::integer, 0);
+    v_item_loaf_spots := greatest(coalesce((v_item->>'loaf_spots')::integer, 0), 0);
 
     if v_item_name is null then
       raise exception 'Each item needs a name';
@@ -1492,12 +1490,22 @@ begin
     end if;
 
     v_subtotal := v_subtotal + (v_quantity * v_unit_price_cents);
+    v_calculated_loaves := v_calculated_loaves + v_item_loaf_spots;
     if v_tax_category = 'general_product' then
       v_general_product_subtotal := v_general_product_subtotal + (v_quantity * v_unit_price_cents);
     else
       v_home_bakery_subtotal := v_home_bakery_subtotal + (v_quantity * v_unit_price_cents);
     end if;
   end loop;
+
+  if v_calculated_loaves > 0 then
+    v_total_loaves := v_calculated_loaves;
+  end if;
+
+  if p_fulfillment_status <> 'canceled'
+    and v_existing_loaves + v_total_loaves > v_capacity then
+    raise exception 'This pickup date only has % loaf spots left', greatest(v_capacity - v_existing_loaves, 0);
+  end if;
 
   if v_discount > v_subtotal then
     raise exception 'Discount cannot be more than the subtotal';
