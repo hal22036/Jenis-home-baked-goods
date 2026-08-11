@@ -9,7 +9,7 @@
   />
   <title>Bakery Bread Orders</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
-  <link rel="stylesheet" href="styles.css?v=20260810-shipping-coupons" />
+  <link rel="stylesheet" href="styles.css?v=20260810-checkout-coupon" />
 </head>
 <body>
   <header class="site-header">
@@ -52,7 +52,10 @@
       <div id="product-list" class="product-grid"></div>
 
       <div class="summary" aria-live="polite">
-        <div><strong>Order total</strong></div>
+        <div>
+          <strong>Subtotal</strong>
+          <p class="summary-note">Tax and shipping calculated at checkout.</p>
+        </div>
         <div id="order-total">$0.00</div>
       </div>
     </section>
@@ -131,18 +134,6 @@
           </label>
         </div>
 
-        <div class="coupon-box">
-          <label>
-            Coupon code
-            <input id="coupon-code" autocomplete="off" autocapitalize="characters" placeholder="Optional" />
-          </label>
-          <div class="coupon-actions">
-            <button class="secondary-button compact-button" type="button" id="apply-coupon">Apply coupon</button>
-            <button class="secondary-button compact-button" type="button" id="remove-coupon" hidden>Remove</button>
-          </div>
-          <p id="coupon-message" class="message" role="status"></p>
-        </div>
-
         <fieldset>
           <legend>Payment method</legend>
           <div id="payment-choices" class="payment-grid"></div>
@@ -160,6 +151,17 @@
       <p class="step">Review order</p>
       <h2 id="review-heading">Invoice summary</h2>
       <div id="review-content"></div>
+      <div class="coupon-box checkout-coupon-box">
+        <label>
+          Coupon code
+          <input id="coupon-code" autocomplete="off" autocapitalize="characters" placeholder="Optional" />
+        </label>
+        <div class="coupon-actions">
+          <button class="secondary-button compact-button" type="button" id="apply-coupon">Update total</button>
+          <button class="secondary-button compact-button" type="button" id="remove-coupon" hidden>Remove</button>
+        </div>
+        <p id="coupon-message" class="message" role="status"></p>
+      </div>
       <div class="invoice-request">
         <span>Email me a receipt?</span>
         <label class="invoice-yes">
@@ -190,6 +192,6 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20260810-shipping-coupons"></script>
+  <script src="app.js?v=20260810-checkout-coupon"></script>
 </body>
 </html>

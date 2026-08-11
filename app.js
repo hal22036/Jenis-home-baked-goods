@@ -868,9 +868,7 @@ function updateSummary() {
     `${remaining} of ${state.selectedDate.capacity} loaf spots are currently available for ${prettyDate(state.selectedDate.pickup_date)}.`;
 
   el.selectedCount.textContent = count;
-  el.orderTotal.textContent = state.coupon
-    ? `${money(selectedTotalCents())} before tax/shipping, coupon applied`
-    : money(selectedTotalCents());
+  el.orderTotal.textContent = money(selectedTotalCents());
 }
 
 el.customerPhone.addEventListener("input", syncPhoneFormat);
@@ -878,12 +876,20 @@ el.customerPhone.addEventListener("blur", syncPhoneFormat);
 document.querySelectorAll('input[name="fulfillment"]').forEach(input => {
   input.addEventListener("change", updateShippingFields);
 });
-el.applyCoupon.addEventListener("click", applyCouponCode);
+el.applyCoupon.addEventListener("click", async () => {
+  const applied = await applyCouponCode();
+  if (applied && !el.reviewSection.hidden) {
+    showReview();
+  }
+});
 el.removeCoupon.addEventListener("click", () => {
   resetCoupon();
   el.couponCode.value = "";
   setCouponMessage("Coupon removed.");
   updateSummary();
+  if (!el.reviewSection.hidden) {
+    showReview();
+  }
 });
 
 el.form.addEventListener("submit", async event => {
@@ -935,12 +941,6 @@ el.form.addEventListener("submit", async event => {
       missingShippingField.focus();
       return;
     }
-  }
-
-  const typedCoupon = cleanText(el.couponCode.value).toUpperCase();
-  if (typedCoupon && state.coupon?.code !== typedCoupon) {
-    const applied = await applyCouponCode();
-    if (!applied) return;
   }
 
   try {

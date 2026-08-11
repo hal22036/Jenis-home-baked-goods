@@ -503,6 +503,16 @@ legend {
   background: var(--surface-soft);
 }
 
+.checkout-coupon-box {
+  margin-top: 18px;
+}
+
+.summary-note {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 .shipping-address-grid {
   display: grid;
   grid-template-columns: 1fr minmax(90px, 0.35fr) minmax(120px, 0.45fr);
