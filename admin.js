@@ -259,7 +259,7 @@ function addManualItemRow(item = {}) {
   const row = document.createElement("div");
   row.className = "manual-item-row";
   row.innerHTML = `
-    <label>
+    <label class="manual-product-field">
       Product
       <select data-manual-product-select>
         <option value="">Choose product</option>
@@ -271,7 +271,7 @@ function addManualItemRow(item = {}) {
       Custom item
       <input data-manual-item-name placeholder="Special order" value="${escapeAttribute(item.name || "")}" />
     </label>
-    <label>
+    <label class="manual-quantity-field">
       Qty
       <input data-manual-item-quantity type="number" min="1" step="1" required value="${item.quantity || 1}" />
     </label>
