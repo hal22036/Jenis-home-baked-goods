@@ -476,6 +476,7 @@ drop function if exists public.admin_update_order_status(uuid,text,text,boolean)
 drop function if exists public.admin_update_order_status(uuid,text,text,boolean,boolean);
 drop function if exists public.admin_update_order_status(uuid,text,text,boolean,boolean,boolean,text);
 drop function if exists public.admin_create_manual_order(uuid,text,text,text,text,text,text,text,integer,jsonb);
+drop function if exists public.admin_create_manual_order(uuid,text,text,text,text,text,text,text,integer,integer,jsonb);
 drop function if exists public.admin_list_pickup_dates();
 drop function if exists public.admin_save_pickup_date(uuid,date,integer,boolean);
 drop function if exists public.admin_list_products();
@@ -1397,6 +1398,7 @@ create or replace function public.admin_create_manual_order(
   p_payment_status text,
   p_fulfillment_status text,
   p_total_loaves integer,
+  p_discount_cents integer,
   p_items jsonb
 )
 returns table(order_id uuid, order_code text, total_cents integer)
@@ -1413,6 +1415,7 @@ declare
   v_subtotal integer := 0;
   v_home_bakery_subtotal integer := 0;
   v_general_product_subtotal integer := 0;
+  v_discount integer := greatest(coalesce(p_discount_cents, 0), 0);
   v_totals record;
   v_item jsonb;
   v_item_name text;
@@ -1496,9 +1499,13 @@ begin
     end if;
   end loop;
 
+  if v_discount > v_subtotal then
+    raise exception 'Discount cannot be more than the subtotal';
+  end if;
+
   select *
   into v_totals
-  from public.calculate_order_totals(v_subtotal, v_home_bakery_subtotal, v_general_product_subtotal, 0, null, 'pickup', null);
+  from public.calculate_order_totals(v_subtotal, v_home_bakery_subtotal, v_general_product_subtotal, v_discount, 'items', 'pickup', null);
 
   insert into public.orders (
     pickup_date_id,
@@ -1529,7 +1536,7 @@ begin
     p_payment_status,
     p_fulfillment_status,
     v_subtotal,
-    0,
+    v_discount,
     v_totals.tax_cents,
     0,
     v_totals.final_total_cents,
@@ -2033,8 +2040,8 @@ grant execute on function public.admin_list_orders(boolean) to authenticated;
 revoke all on function public.admin_update_order_status(uuid,text,text,boolean,boolean,boolean,text) from public;
 grant execute on function public.admin_update_order_status(uuid,text,text,boolean,boolean,boolean,text) to authenticated;
 
-revoke all on function public.admin_create_manual_order(uuid,text,text,text,text,text,text,text,integer,jsonb) from public;
-grant execute on function public.admin_create_manual_order(uuid,text,text,text,text,text,text,text,integer,jsonb) to authenticated;
+revoke all on function public.admin_create_manual_order(uuid,text,text,text,text,text,text,text,integer,integer,jsonb) from public;
+grant execute on function public.admin_create_manual_order(uuid,text,text,text,text,text,text,text,integer,integer,jsonb) to authenticated;
 
 revoke all on function public.admin_list_pickup_dates() from public;
 grant execute on function public.admin_list_pickup_dates() to authenticated;
