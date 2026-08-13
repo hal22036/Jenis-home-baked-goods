@@ -87,6 +87,7 @@ const el = {
   form: document.querySelector("#order-form"),
   formMessage: document.querySelector("#form-message"),
   customerPhone: document.querySelector("#customer-phone"),
+  shippingOption: document.querySelector("#shipping-option"),
   shippingAddressField: document.querySelector("#shipping-address-field"),
   shippingStreet: document.querySelector("#shipping-street"),
   shippingCity: document.querySelector("#shipping-city"),
@@ -457,6 +458,16 @@ function selectedNonShippableItems() {
   );
 }
 
+function selectedShippableItems() {
+  return state.products.filter(product =>
+    (state.quantities[product.id] || 0) > 0 && product.shippable
+  );
+}
+
+function shippingCanBeSelected() {
+  return selectedShippableItems().length > 0 && selectedNonShippableItems().length === 0;
+}
+
 function shippingIsSelected() {
   return fulfillmentMethod() === "shipping";
 }
@@ -483,8 +494,19 @@ function firstMissingShippingField() {
 }
 
 function updateShippingFields() {
-  const isShipping = shippingIsSelected();
   const nonShippableItems = selectedNonShippableItems();
+  const canSelectShipping = shippingCanBeSelected();
+  const shippingInput = el.shippingOption.querySelector('input[value="shipping"]');
+  const pickupInput = document.querySelector('input[name="fulfillment"][value="pickup"]');
+
+  el.shippingOption.hidden = !canSelectShipping;
+  shippingInput.disabled = !canSelectShipping;
+
+  if (!canSelectShipping && shippingInput.checked) {
+    pickupInput.checked = true;
+  }
+
+  const isShipping = shippingIsSelected();
 
   if (state.coupon) {
     resetCoupon("Coupon removed because the checkout option changed. Apply it again before checkout.");
@@ -499,7 +521,14 @@ function updateShippingFields() {
     shippingAddressFields().forEach(field => {
       field.value = "";
     });
-    el.shippingMessage.textContent = "Pickup orders are available on your selected Friday.";
+    if (selectedQuantity() === 0) {
+      el.shippingMessage.textContent = "Choose an item to see available checkout options.";
+    } else if (nonShippableItems.length) {
+      el.shippingMessage.textContent =
+        `Shipping is hidden because this order includes pickup-only item${nonShippableItems.length === 1 ? "" : "s"}: ${nonShippableItems.map(product => displayNameFor(product)).join(", ")}.`;
+    } else {
+      el.shippingMessage.textContent = "Pickup orders are available on your selected Friday.";
+    }
   } else if (nonShippableItems.length) {
     el.shippingMessage.textContent =
       `Shipping is not available because this order includes: ${nonShippableItems.map(product => displayNameFor(product)).join(", ")}.`;
@@ -1295,12 +1324,12 @@ function showSuccess(result, paymentMethod, invoiceRequested, items, details, co
 
   renderSuccessPaymentDetails(paymentMethod);
   el.form.reset();
-  updateShippingFields();
   el.invoiceRequested.checked = false;
   updateInvoiceEmailField();
   resetCoupon();
   el.couponCode.value = "";
   state.quantities = {};
+  updateShippingFields();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
