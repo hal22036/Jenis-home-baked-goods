@@ -582,21 +582,22 @@ function renderOrders() {
 }
 
 function bakingBreakdownMarkup(orders) {
-  const itemTotals = new Map();
+  const breadTotals = new Map();
+  const treatTotals = new Map();
   const activeOrders = orders.filter(order => !order.archived && order.fulfillment_status !== "canceled");
 
   activeOrders.forEach(order => {
     (order.items || []).forEach(item => {
       const itemName = adminItemName(item);
-      itemTotals.set(itemName, (itemTotals.get(itemName) || 0) + Number(item.quantity || 0));
+      const targetTotals = isBreadLoafItem(item) ? breadTotals : treatTotals;
+      targetTotals.set(itemName, (targetTotals.get(itemName) || 0) + Number(item.quantity || 0));
     });
   });
 
-  const items = [...itemTotals.entries()]
-    .filter(([, quantity]) => quantity > 0)
-    .sort(([firstName], [secondName]) => firstName.localeCompare(secondName));
+  const breadItems = sortedBreakdownItems(breadTotals);
+  const treatItems = sortedBreakdownItems(treatTotals);
 
-  if (!items.length) {
+  if (!breadItems.length && !treatItems.length) {
     return `
       <aside class="baking-breakdown">
         <h4>Active Orders Breakdown</h4>
@@ -608,23 +609,47 @@ function bakingBreakdownMarkup(orders) {
   return `
     <aside class="baking-breakdown">
       <h4>Active Orders Breakdown</h4>
-      <table class="baking-breakdown-table">
-        <thead>
-          <tr>
-            <th scope="col">Item</th>
-            <th scope="col">Qty</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${items.map(([name, quantity]) => `
-            <tr>
-              <td>${escapeHtml(name)}</td>
-              <td>${quantity}</td>
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
+      <div class="baking-breakdown-sections">
+        ${breakdownTableMarkup("Bread loaf orders", breadItems)}
+        ${breakdownTableMarkup("Other Delicious Treats", treatItems)}
+      </div>
     </aside>
+  `;
+}
+
+function sortedBreakdownItems(itemTotals) {
+  return [...itemTotals.entries()]
+    .filter(([, quantity]) => quantity > 0)
+    .sort(([firstName], [secondName]) => firstName.localeCompare(secondName));
+}
+
+function isBreadLoafItem(item) {
+  return Number(item.capacity_units || 0) > 0 && item.category !== "Other Delicious Treats";
+}
+
+function breakdownTableMarkup(title, items) {
+  return `
+    <section class="baking-breakdown-section">
+      <h5>${title}</h5>
+      ${items.length ? `
+        <table class="baking-breakdown-table">
+          <thead>
+            <tr>
+              <th scope="col">Item</th>
+              <th scope="col">Qty</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.map(([name, quantity]) => `
+              <tr>
+                <td>${escapeHtml(name)}</td>
+                <td>${quantity}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      ` : `<p>No items.</p>`}
+    </section>
   `;
 }
 
