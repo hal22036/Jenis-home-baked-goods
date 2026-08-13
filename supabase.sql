@@ -475,6 +475,7 @@ drop function if exists public.admin_list_orders(boolean);
 drop function if exists public.admin_update_order_status(uuid,text,text,boolean);
 drop function if exists public.admin_update_order_status(uuid,text,text,boolean,boolean);
 drop function if exists public.admin_update_order_status(uuid,text,text,boolean,boolean,boolean,text);
+drop function if exists public.admin_update_order_status(uuid,text,text,text,boolean,boolean,boolean,text);
 drop function if exists public.admin_create_manual_order(uuid,text,text,text,text,text,text,text,integer,jsonb);
 drop function if exists public.admin_create_manual_order(uuid,text,text,text,text,text,text,text,integer,integer,jsonb);
 drop function if exists public.admin_list_pickup_dates();
@@ -1322,6 +1323,7 @@ $$;
 
 create or replace function public.admin_update_order_status(
   p_order_id uuid,
+  p_payment_method text,
   p_payment_status text,
   p_fulfillment_status text,
   p_archived boolean,
@@ -1347,6 +1349,10 @@ begin
     raise exception 'Admin access required';
   end if;
 
+  if p_payment_method not in ('Venmo','Zelle','PayPal','CashApp','CashAtPickup') then
+    raise exception 'Invalid payment method';
+  end if;
+
   if p_payment_status not in ('pending','paid','refunded') then
     raise exception 'Invalid payment status';
   end if;
@@ -1362,6 +1368,7 @@ begin
 
   update orders
   set
+    payment_method = p_payment_method,
     payment_status = p_payment_status,
     fulfillment_status = p_fulfillment_status,
     archived = p_archived,
@@ -2045,8 +2052,8 @@ grant execute on function public.is_admin() to authenticated;
 revoke all on function public.admin_list_orders(boolean) from public;
 grant execute on function public.admin_list_orders(boolean) to authenticated;
 
-revoke all on function public.admin_update_order_status(uuid,text,text,boolean,boolean,boolean,text) from public;
-grant execute on function public.admin_update_order_status(uuid,text,text,boolean,boolean,boolean,text) to authenticated;
+revoke all on function public.admin_update_order_status(uuid,text,text,text,boolean,boolean,boolean,text) from public;
+grant execute on function public.admin_update_order_status(uuid,text,text,text,boolean,boolean,boolean,text) to authenticated;
 
 revoke all on function public.admin_create_manual_order(uuid,text,text,text,text,text,text,text,integer,integer,jsonb) from public;
 grant execute on function public.admin_create_manual_order(uuid,text,text,text,text,text,text,text,integer,integer,jsonb) to authenticated;

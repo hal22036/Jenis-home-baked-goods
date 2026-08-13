@@ -673,7 +673,7 @@ function orderCardMarkup(order) {
         <div><dt>Order placed</dt><dd>${prettyDateTime(order.created_at)}</dd></div>
         <div><dt>Phone</dt><dd><a href="tel:${order.customer_phone}">${order.customer_phone}</a></dd></div>
         <div><dt>Email</dt><dd>${order.customer_email ? `<a href="mailto:${order.customer_email}">${order.customer_email}</a>` : "Not provided"}</dd></div>
-        <div><dt>Payment</dt><dd>${paymentLabel(order.payment_method)}</dd></div>
+        <div><dt>Payment</dt><dd>${paymentLabel(order.payment_method)} &middot; ${statusLabel(order.payment_status)}</dd></div>
         <div><dt>Method</dt><dd>${fulfillmentLabel(order.fulfillment_method)}</dd></div>
         <div><dt>Receipt email</dt><dd>${invoiceStatusLabel(order)}</dd></div>
         <div><dt>Loaf spots</dt><dd>${order.total_loaves}</dd></div>
@@ -698,6 +698,12 @@ function orderCardMarkup(order) {
       ${order.notes ? `<p class="admin-notes"><strong>Questions/comments:</strong> ${order.notes}</p>` : ""}
 
       <div class="status-grid">
+        <label>
+          Payment method
+          <select data-payment-method>
+            ${paymentMethodOptions(order.payment_method)}
+          </select>
+        </label>
         <label>
           Payment status
           <select data-payment-status>
@@ -766,6 +772,18 @@ function fulfillmentLabel(value) {
   return value === "shipping" ? "Shipping" : "Pickup";
 }
 
+function paymentMethodOptions(selected) {
+  return [
+    ["Venmo", "Venmo"],
+    ["Zelle", "Zelle"],
+    ["PayPal", "PayPal"],
+    ["CashApp", "CashApp"],
+    ["CashAtPickup", "Cash at Pickup"]
+  ]
+    .map(([value, label]) => option(value, label, selected))
+    .join("");
+}
+
 function statusLabel(value) {
   return String(value || "")
     .split("_")
@@ -815,6 +833,7 @@ async function saveOrderStatus(event) {
 
   const { error } = await supabaseClient.rpc("admin_update_order_status", {
     p_order_id: card.dataset.orderId,
+    p_payment_method: card.querySelector("[data-payment-method]").value,
     p_payment_status: card.querySelector("[data-payment-status]").value,
     p_fulfillment_status: card.querySelector("[data-fulfillment-status]").value,
     p_archived: card.querySelector("[data-archived]").checked,
