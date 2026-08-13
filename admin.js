@@ -663,7 +663,7 @@ function orderCardMarkup(order) {
         </div>
         <div class="order-summary-meta">
           <span>${paymentLabel(order.payment_method)} &middot; ${statusLabel(order.fulfillment_status)}</span>
-          <strong>${money(order.total_cents)}</strong>
+          <strong>${money(order.total_cents)} &middot; ${statusLabel(order.payment_status)}</strong>
         </div>
       </summary>
 
