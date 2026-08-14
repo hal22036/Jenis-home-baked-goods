@@ -87,6 +87,7 @@ const el = {
   form: document.querySelector("#order-form"),
   formMessage: document.querySelector("#form-message"),
   customerPhone: document.querySelector("#customer-phone"),
+  fulfillmentOptions: document.querySelector("#fulfillment-options"),
   shippingOption: document.querySelector("#shipping-option"),
   shippingAddressField: document.querySelector("#shipping-address-field"),
   shippingStreet: document.querySelector("#shipping-street"),
@@ -499,6 +500,7 @@ function updateShippingFields() {
   const shippingInput = el.shippingOption.querySelector('input[value="shipping"]');
   const pickupInput = document.querySelector('input[name="fulfillment"][value="pickup"]');
 
+  el.fulfillmentOptions.hidden = !canSelectShipping;
   el.shippingOption.hidden = !canSelectShipping;
   shippingInput.disabled = !canSelectShipping;
 
@@ -521,14 +523,7 @@ function updateShippingFields() {
     shippingAddressFields().forEach(field => {
       field.value = "";
     });
-    if (selectedQuantity() === 0) {
-      el.shippingMessage.textContent = "Choose an item to see available checkout options.";
-    } else if (nonShippableItems.length) {
-      el.shippingMessage.textContent =
-        `Shipping is hidden because this order includes pickup-only item${nonShippableItems.length === 1 ? "" : "s"}: ${nonShippableItems.map(product => displayNameFor(product)).join(", ")}.`;
-    } else {
-      el.shippingMessage.textContent = "Pickup orders are available on your selected Friday.";
-    }
+    el.shippingMessage.textContent = "";
   } else if (nonShippableItems.length) {
     el.shippingMessage.textContent =
       `Shipping is not available because this order includes: ${nonShippableItems.map(product => displayNameFor(product)).join(", ")}.`;
