@@ -11,6 +11,12 @@ const state = {
   taxSettings: null
 };
 
+const ADMIN_SETTINGS = {
+  orderCutoffWeekday: 3, // 0 = Sunday, 3 = Wednesday.
+  orderCutoffHour: 17,
+  bakeryTimeZone: "America/Los_Angeles"
+};
+
 const el = {
   loginPanel: document.querySelector("#login-panel"),
   adminPageNav: document.querySelector("#admin-page-nav"),
@@ -112,8 +118,53 @@ function localDateString(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
-function isFutureOrToday(dateString) {
-  return dateString >= localDateString();
+function bakeryDateTimeParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: ADMIN_SETTINGS.bakeryTimeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).formatToParts(date);
+
+  return Object.fromEntries(parts.map(part => [part.type, part.value]));
+}
+
+function comparableDateTime(parts) {
+  return Number(`${parts.year}${parts.month}${parts.day}${parts.hour}${parts.minute}`);
+}
+
+function cutoffForPickupDate(pickupDateString) {
+  const [year, month, day] = pickupDateString.split("-").map(Number);
+  const pickupDate = new Date(year, month - 1, day);
+  const daysSinceCutoff =
+    (pickupDate.getDay() - ADMIN_SETTINGS.orderCutoffWeekday + 7) % 7;
+
+  pickupDate.setDate(pickupDate.getDate() - daysSinceCutoff);
+
+  return {
+    year: String(pickupDate.getFullYear()),
+    month: String(pickupDate.getMonth() + 1).padStart(2, "0"),
+    day: String(pickupDate.getDate()).padStart(2, "0"),
+    hour: String(ADMIN_SETTINGS.orderCutoffHour).padStart(2, "0"),
+    minute: "00"
+  };
+}
+
+function orderDateHasClosed(date) {
+  const now = comparableDateTime(bakeryDateTimeParts());
+  const cutoff = comparableDateTime(cutoffForPickupDate(date.pickup_date));
+  return now >= cutoff;
+}
+
+function pickupDateHasPassed(date) {
+  return date.pickup_date < localDateString();
+}
+
+function isActiveOrderDate(date) {
+  return !pickupDateHasPassed(date) && !orderDateHasClosed(date);
 }
 
 function prettyDateTime(value) {
@@ -251,7 +302,7 @@ function renderManualOrderDateOptions() {
   if (!el.manualPickupDate) return;
 
   const selected = el.manualPickupDate.value;
-  const upcomingPickupDates = state.pickupDates.filter(date => isFutureOrToday(date.pickup_date));
+  const upcomingPickupDates = state.pickupDates.filter(date => isActiveOrderDate(date));
 
   el.manualPickupDate.innerHTML = `
     <option value="">Choose order date</option>
@@ -1238,10 +1289,11 @@ function filteredPickupDates() {
   const filter = el.pickupDateFilter.value;
 
   return state.pickupDates.filter(date => {
-    const isPast = !isFutureOrToday(date.pickup_date);
+    const isPast = pickupDateHasPassed(date) || orderDateHasClosed(date);
+    const isActive = !isPast;
 
-    if (filter === "open") return !isPast && date.is_open;
-    if (filter === "closed") return !isPast && !date.is_open;
+    if (filter === "open") return isActive && date.is_open;
+    if (filter === "closed") return isActive && !date.is_open;
     if (filter === "past") return isPast;
     return true;
   });
@@ -1251,7 +1303,7 @@ function emptyPickupDateFilterMessage() {
   return {
     open: "No open upcoming pickup dates.",
     closed: "No closed upcoming pickup dates.",
-    past: "No past pickup dates.",
+    past: "No past or ordering-closed pickup dates.",
     all: "No pickup dates yet."
   }[el.pickupDateFilter.value] || "No pickup dates yet.";
 }
