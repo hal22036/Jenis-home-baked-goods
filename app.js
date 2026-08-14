@@ -483,6 +483,66 @@ function fulfillmentLabel(value = fulfillmentMethod()) {
   return value === "shipping" ? "Shipping" : "Pickup";
 }
 
+function itemFulfillmentLabel(details, item) {
+  return details.fulfillmentMethod === "shipping" && item.shippable ? "Ships" : "Pickup";
+}
+
+function itemFulfillmentBadge(details, item) {
+  const label = itemFulfillmentLabel(details, item);
+  const className = label === "Ships" ? "ships" : "pickup";
+  return `<span class="item-fulfillment-tag ${className}">${label}</span>`;
+}
+
+function fulfillmentSummary(details, items) {
+  if (details.fulfillmentMethod !== "shipping") return "Pickup";
+
+  const hasShipping = items.some(item => item.shippable);
+  const hasPickup = items.some(item => !item.shippable);
+
+  if (hasShipping && hasPickup) return "Shipping + Pickup";
+  if (hasShipping) return "Shipping";
+  return "Pickup";
+}
+
+function pickupDetailsMarkup(pickupDate) {
+  return `
+    <div class="pickup-details">
+      <h3>Pickup details</h3>
+      <p>
+        Pickup is on ${prettyDate(pickupDate)} between ${STORE_SETTINGS.pickupWindow}.
+      </p>
+      <p>
+        Address: ${STORE_SETTINGS.pickupAddress}<br>
+        Gate Code: ${STORE_SETTINGS.gateCode}<br>
+        Please call/text with any questions: ${STORE_SETTINGS.contactPhone}.
+      </p>
+    </div>
+  `;
+}
+
+function shippingDetailsMarkup(pickupDate) {
+  return `
+    <div class="pickup-details">
+      <h3>Shipping details</h3>
+      <p>Your shippable items are planned for ${prettyDate(pickupDate)}.</p>
+      <p>Please call/text with any questions: ${STORE_SETTINGS.contactPhone}.</p>
+    </div>
+  `;
+}
+
+function fulfillmentDetailsMarkup(details, items) {
+  if (details.fulfillmentMethod !== "shipping") {
+    return pickupDetailsMarkup(state.selectedDate.pickup_date);
+  }
+
+  const hasPickupItems = items.some(item => !item.shippable);
+
+  return `
+    ${shippingDetailsMarkup(state.selectedDate.pickup_date)}
+    ${hasPickupItems ? pickupDetailsMarkup(state.selectedDate.pickup_date) : ""}
+  `;
+}
+
 function shippingAddressFields() {
   return [el.shippingStreet, el.shippingCity, el.shippingState, el.shippingZip];
 }
@@ -532,7 +592,7 @@ function updateShippingFields() {
     el.shippingMessage.textContent = "";
   } else if (nonShippableItems.length) {
     el.shippingMessage.textContent =
-      `Shipping can only be used for shippable items. Remove pickup-only items before choosing shipping: ${nonShippableItems.map(product => displayNameFor(product)).join(", ")}.`;
+      `Shippable items will be mailed. Pickup-only items will still be picked up: ${nonShippableItems.map(product => displayNameFor(product)).join(", ")}.`;
   } else {
     el.shippingMessage.textContent = "Only items marked shippable by Jeni can be mailed.";
   }
@@ -965,16 +1025,6 @@ el.form.addEventListener("submit", async event => {
   }
 
   if (shippingIsSelected()) {
-    const nonShippableItems = selectedNonShippableItems();
-
-    if (nonShippableItems.length) {
-      setMessage(
-        `Shipping is not available for: ${nonShippableItems.map(product => displayNameFor(product)).join(", ")}.`,
-        "error"
-      );
-      return;
-    }
-
     const missingShippingField = firstMissingShippingField();
     if (missingShippingField) {
       setMessage("Please complete the shipping address.", "error");
@@ -1058,7 +1108,7 @@ async function showReview() {
       <div><dt>Name</dt><dd>${escapeHtml(details.name)}</dd></div>
       <div><dt>Phone</dt><dd>${details.phone}</dd></div>
       <div><dt>Payment</dt><dd>${payment.label}</dd></div>
-      <div><dt>Method</dt><dd>${fulfillmentLabel(details.fulfillmentMethod)}</dd></div>
+      <div><dt>Method</dt><dd>${fulfillmentSummary(details, items)}</dd></div>
       <div><dt>Loaf spots</dt><dd>${selectedCapacityUnits()}</dd></div>
     </dl>
     ${details.fulfillmentMethod === "shipping" ? `
@@ -1069,7 +1119,7 @@ async function showReview() {
         <div>
           <span class="invoice-item-name">
             ${invoiceItemImageMarkup(item)}
-            <span>${item.quantity}x ${item.name}</span>
+            <span class="invoice-item-text">${item.quantity}x ${item.name} ${itemFulfillmentBadge(details, item)}</span>
           </span>
           <span>${money(item.quantity * item.price_cents)}</span>
         </div>
@@ -1233,7 +1283,7 @@ function showSuccess(result, paymentMethod, invoiceRequested, items, details, co
       <div><dt>Total</dt><dd>${money(result.total_cents)}</dd></div>
       ${coupon ? `<div><dt>Coupon</dt><dd>${coupon.code} (${couponAppliesToLabel(coupon.applies_to)}) -${money(coupon.discount_cents)}</dd></div>` : ""}
       <div><dt>Payment</dt><dd data-payment-label></dd></div>
-      <div><dt>Method</dt><dd>${fulfillmentLabel(details.fulfillmentMethod)}</dd></div>
+      <div><dt>Method</dt><dd>${fulfillmentSummary(details, items)}</dd></div>
       <div><dt>Receipt email</dt><dd>${invoiceRequested ? "Requested" : "Not requested"}</dd></div>
       ${invoiceRequested ? `<div><dt>Email</dt><dd>${details.email}</dd></div>` : ""}
     </dl>
@@ -1273,7 +1323,7 @@ function showSuccess(result, paymentMethod, invoiceRequested, items, details, co
         <div>
           <span class="invoice-item-name">
             ${invoiceItemImageMarkup(item)}
-            <span>${item.quantity}x ${item.name}</span>
+            <span class="invoice-item-text">${item.quantity}x ${item.name} ${itemFulfillmentBadge(details, item)}</span>
           </span>
           <span>${money(item.quantity * item.price_cents)}</span>
         </div>
@@ -1289,25 +1339,7 @@ function showSuccess(result, paymentMethod, invoiceRequested, items, details, co
         <div><strong>Total</strong><strong>${money(result.total_cents)}</strong></div>
       </div>
     </div>
-    ${details.fulfillmentMethod === "shipping" ? `
-      <div class="pickup-details">
-        <h3>Shipping details</h3>
-        <p>Your order is planned for ${prettyDate(state.selectedDate.pickup_date)}.</p>
-        <p>Please call/text with any questions: ${STORE_SETTINGS.contactPhone}.</p>
-      </div>
-    ` : `
-      <div class="pickup-details">
-        <h3>Pickup details</h3>
-        <p>
-          Pickup is on ${prettyDate(state.selectedDate.pickup_date)} between ${STORE_SETTINGS.pickupWindow}.
-        </p>
-        <p>
-          Address: ${STORE_SETTINGS.pickupAddress}<br>
-          Gate Code: ${STORE_SETTINGS.gateCode}<br>
-          Please call/text with any questions: ${STORE_SETTINGS.contactPhone}.
-        </p>
-      </div>
-    `}
+    ${fulfillmentDetailsMarkup(details, items)}
     <button class="secondary-button" type="button" id="make-another-order">
       Make another order
     </button>

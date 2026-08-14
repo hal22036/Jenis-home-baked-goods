@@ -80,6 +80,33 @@ function fulfillmentLabel(value) {
   return value === "shipping" ? "Shipping" : "Pickup";
 }
 
+function itemIsShippable(item) {
+  return item.shippable === true ||
+    item.shippable === 1 ||
+    String(item.shippable).toLowerCase() === "true";
+}
+
+function itemFulfillmentLabel(order, item) {
+  return order.fulfillment_method === "shipping" && itemIsShippable(item) ? "Ships" : "Pickup";
+}
+
+function itemFulfillmentBadge(order, item) {
+  const label = itemFulfillmentLabel(order, item);
+  const className = label === "Ships" ? "ships" : "pickup";
+  return `<span class="item-fulfillment-tag ${className}">${label}</span>`;
+}
+
+function fulfillmentSummary(order, items) {
+  if (order.fulfillment_method !== "shipping") return "Pickup";
+
+  const hasShipping = items.some(item => itemIsShippable(item));
+  const hasPickup = items.some(item => !itemIsShippable(item));
+
+  if (hasShipping && hasPickup) return "Shipping + Pickup";
+  if (hasShipping) return "Shipping";
+  return "Pickup";
+}
+
 function couponAppliesToLabel(value) {
   return {
     items: "items",
@@ -101,7 +128,7 @@ function renderInvoice(order) {
       <div><dt>Phone</dt><dd>${escapeHtml(order.customer_phone)}</dd></div>
       ${order.customer_email ? `<div><dt>Email</dt><dd>${escapeHtml(order.customer_email)}</dd></div>` : ""}
       <div><dt>Payment</dt><dd>${escapeHtml(paymentLabel(order.payment_method))}</dd></div>
-      <div><dt>Method</dt><dd>${escapeHtml(fulfillmentLabel(order.fulfillment_method))}</dd></div>
+      <div><dt>Method</dt><dd>${escapeHtml(fulfillmentSummary(order, items))}</dd></div>
     </dl>
 
     ${isShipping ? `
@@ -113,7 +140,7 @@ function renderInvoice(order) {
         <div>
           <span class="invoice-item-name">
             ${itemImage(item)}
-            <span>${item.quantity}x ${escapeHtml(itemName(item))}</span>
+            <span class="invoice-item-text">${item.quantity}x ${escapeHtml(itemName(item))} ${itemFulfillmentBadge(order, item)}</span>
           </span>
           <span>${money(item.quantity * item.unit_price_cents)}</span>
         </div>
@@ -142,9 +169,20 @@ function renderInvoice(order) {
     ${isShipping ? `
       <div class="pickup-details">
         <h3>Shipping details</h3>
-        <p>Your order is planned for ${prettyDate(order.pickup_date)}.</p>
+        <p>Your shippable items are planned for ${prettyDate(order.pickup_date)}.</p>
         <p>Please call/text with any questions: ${CONTACT_PHONE}.</p>
       </div>
+      ${items.some(item => !itemIsShippable(item)) ? `
+        <div class="pickup-details">
+          <h3>Pickup details</h3>
+          <p>Pickup-only items are picked up on ${prettyDate(order.pickup_date)} between ${PICKUP_WINDOW}.</p>
+          <p>
+            Address: ${PICKUP_ADDRESS}<br>
+            Gate Code: ${GATE_CODE}<br>
+            Please call/text with any questions: ${CONTACT_PHONE}.
+          </p>
+        </div>
+      ` : ""}
     ` : `
       <div class="pickup-details">
         <h3>Pickup details</h3>

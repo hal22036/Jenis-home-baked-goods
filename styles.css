@@ -663,6 +663,34 @@ button[type="submit"]:disabled {
   min-width: 0;
 }
 
+.invoice-item-text {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.item-fulfillment-tag {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.item-fulfillment-tag.ships {
+  background: #dff1e7;
+  color: #245238;
+}
+
+.item-fulfillment-tag.pickup {
+  background: #fff0b8;
+  color: #5f2d09;
+}
+
 .invoice-item-image {
   width: 44px;
   height: 44px;

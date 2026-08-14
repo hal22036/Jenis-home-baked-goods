@@ -871,10 +871,6 @@ begin
       raise exception 'Invalid product';
     end if;
 
-    if v_fulfillment_method = 'shipping' and not coalesce(v_shippable, false) then
-      raise exception 'One or more selected items cannot be shipped';
-    end if;
-
     v_total := v_total + v_price * v_quantity;
     if v_tax_category = 'general_product' then
       v_general_product_total := v_general_product_total + v_price * v_quantity;
