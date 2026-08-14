@@ -104,6 +104,17 @@ function prettyDate(dateString) {
   });
 }
 
+function localDateString(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function isFutureOrToday(dateString) {
+  return dateString >= localDateString();
+}
+
 function prettyDateTime(value) {
   return new Date(value).toLocaleString("en-US", {
     month: "short",
@@ -239,14 +250,16 @@ function renderManualOrderDateOptions() {
   if (!el.manualPickupDate) return;
 
   const selected = el.manualPickupDate.value;
+  const upcomingPickupDates = state.pickupDates.filter(date => isFutureOrToday(date.pickup_date));
+
   el.manualPickupDate.innerHTML = `
     <option value="">Choose order date</option>
-    ${state.pickupDates.map(date => `
+    ${upcomingPickupDates.map(date => `
       <option value="${date.id}">${prettyDate(date.pickup_date)}${date.is_open ? "" : " (closed)"}</option>
     `).join("")}
   `;
 
-  if (selected && state.pickupDates.some(date => date.id === selected)) {
+  if (selected && upcomingPickupDates.some(date => date.id === selected)) {
     el.manualPickupDate.value = selected;
   }
 
@@ -1194,12 +1207,14 @@ async function removeCoupon(event) {
 }
 
 function renderPickupDates() {
-  if (!state.pickupDates.length) {
-    el.pickupDatesList.innerHTML = "<p class=\"muted\">No pickup dates yet.</p>";
+  const upcomingPickupDates = state.pickupDates.filter(date => isFutureOrToday(date.pickup_date));
+
+  if (!upcomingPickupDates.length) {
+    el.pickupDatesList.innerHTML = "<p class=\"muted\">No upcoming pickup dates yet.</p>";
     return;
   }
 
-  el.pickupDatesList.innerHTML = state.pickupDates.map(date => `
+  el.pickupDatesList.innerHTML = upcomingPickupDates.map(date => `
     <article class="pickup-date-row" data-date-id="${date.id}">
       <div>
         <strong>${prettyDate(date.pickup_date)}</strong>
