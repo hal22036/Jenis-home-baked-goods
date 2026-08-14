@@ -315,6 +315,18 @@
         </div>
       </div>
 
+      <div class="date-filters" aria-label="Pickup date filters">
+        <label>
+          Show dates
+          <select id="pickup-date-filter">
+            <option value="open">Open upcoming dates</option>
+            <option value="closed">Closed upcoming dates</option>
+            <option value="past">Past dates</option>
+            <option value="all">All dates</option>
+          </select>
+        </label>
+      </div>
+
       <form id="pickup-date-form" class="date-admin-form">
         <input id="pickup-date-id" type="hidden" />
         <label>
@@ -339,6 +351,6 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="admin.js?v=20260810-manual-row-totals"></script>
+  <script src="admin.js?v=20260813-date-filters"></script>
 </body>
 </html>

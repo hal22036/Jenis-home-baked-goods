@@ -67,7 +67,8 @@
   gap: 10px;
 }
 
-.order-filters {
+.order-filters,
+.date-filters {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   align-items: end;

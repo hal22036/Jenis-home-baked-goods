@@ -57,6 +57,7 @@ const el = {
   refreshCoupons: document.querySelector("#refresh-coupons"),
   signOut: document.querySelector("#admin-sign-out"),
   pickupDateForm: document.querySelector("#pickup-date-form"),
+  pickupDateFilter: document.querySelector("#pickup-date-filter"),
   pickupDateId: document.querySelector("#pickup-date-id"),
   pickupDateInput: document.querySelector("#pickup-date-input"),
   pickupCapacityInput: document.querySelector("#pickup-capacity-input"),
@@ -1206,15 +1207,17 @@ async function removeCoupon(event) {
   await loadCoupons();
 }
 
-function renderPickupDates() {
-  const upcomingPickupDates = state.pickupDates.filter(date => isFutureOrToday(date.pickup_date));
+el.pickupDateFilter.addEventListener("change", renderPickupDates);
 
-  if (!upcomingPickupDates.length) {
-    el.pickupDatesList.innerHTML = "<p class=\"muted\">No upcoming pickup dates yet.</p>";
+function renderPickupDates() {
+  const visiblePickupDates = filteredPickupDates();
+
+  if (!visiblePickupDates.length) {
+    el.pickupDatesList.innerHTML = `<p class="muted">${emptyPickupDateFilterMessage()}</p>`;
     return;
   }
 
-  el.pickupDatesList.innerHTML = upcomingPickupDates.map(date => `
+  el.pickupDatesList.innerHTML = visiblePickupDates.map(date => `
     <article class="pickup-date-row" data-date-id="${date.id}">
       <div>
         <strong>${prettyDate(date.pickup_date)}</strong>
@@ -1229,6 +1232,28 @@ function renderPickupDates() {
   el.pickupDatesList.querySelectorAll("[data-edit-date]").forEach(button => {
     button.addEventListener("click", editPickupDate);
   });
+}
+
+function filteredPickupDates() {
+  const filter = el.pickupDateFilter.value;
+
+  return state.pickupDates.filter(date => {
+    const isPast = !isFutureOrToday(date.pickup_date);
+
+    if (filter === "open") return !isPast && date.is_open;
+    if (filter === "closed") return !isPast && !date.is_open;
+    if (filter === "past") return isPast;
+    return true;
+  });
+}
+
+function emptyPickupDateFilterMessage() {
+  return {
+    open: "No open upcoming pickup dates.",
+    closed: "No closed upcoming pickup dates.",
+    past: "No past pickup dates.",
+    all: "No pickup dates yet."
+  }[el.pickupDateFilter.value] || "No pickup dates yet.";
 }
 
 function editPickupDate(event) {
