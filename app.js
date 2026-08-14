@@ -455,18 +455,24 @@ function fulfillmentMethod() {
 
 function selectedNonShippableItems() {
   return state.products.filter(product =>
-    (state.quantities[product.id] || 0) > 0 && !product.shippable
+    (state.quantities[product.id] || 0) > 0 && !productIsShippable(product)
   );
 }
 
 function selectedShippableItems() {
   return state.products.filter(product =>
-    (state.quantities[product.id] || 0) > 0 && product.shippable
+    (state.quantities[product.id] || 0) > 0 && productIsShippable(product)
   );
 }
 
 function shippingCanBeSelected() {
-  return selectedShippableItems().length > 0 && selectedNonShippableItems().length === 0;
+  return selectedShippableItems().length > 0;
+}
+
+function productIsShippable(product) {
+  return product.shippable === true ||
+    product.shippable === 1 ||
+    String(product.shippable).toLowerCase() === "true";
 }
 
 function shippingIsSelected() {
@@ -526,7 +532,7 @@ function updateShippingFields() {
     el.shippingMessage.textContent = "";
   } else if (nonShippableItems.length) {
     el.shippingMessage.textContent =
-      `Shipping is not available because this order includes: ${nonShippableItems.map(product => displayNameFor(product)).join(", ")}.`;
+      `Shipping can only be used for shippable items. Remove pickup-only items before choosing shipping: ${nonShippableItems.map(product => displayNameFor(product)).join(", ")}.`;
   } else {
     el.shippingMessage.textContent = "Only items marked shippable by Jeni can be mailed.";
   }
@@ -777,8 +783,8 @@ function renderProductCard(products) {
       ${productImageMarkup([primaryProduct], primaryProduct.name)}
       <div>
         <h3>${primaryProduct.name}</h3>
-        <span class="shipping-badge ${primaryProduct.shippable ? "can-ship" : "pickup-only"}">
-          ${primaryProduct.shippable ? "Can ship" : "Pickup only"}
+        <span class="shipping-badge ${productIsShippable(primaryProduct) ? "can-ship" : "pickup-only"}">
+          ${productIsShippable(primaryProduct) ? "Can ship" : "Pickup only"}
         </span>
         <p>${primaryProduct.description || ""}</p>
       </div>
@@ -800,8 +806,8 @@ function renderProductCard(products) {
       <div class="option-card-heading">
         <div>
           <h3>${groupName || primaryProduct.name}</h3>
-          <span class="shipping-badge ${sortedProducts.every(product => product.shippable) ? "can-ship" : "pickup-only"}">
-            ${sortedProducts.every(product => product.shippable) ? "Can ship" : "Some options pickup only"}
+          <span class="shipping-badge ${sortedProducts.some(product => productIsShippable(product)) ? "can-ship" : "pickup-only"}">
+            ${sortedProducts.every(product => productIsShippable(product)) ? "Can ship" : sortedProducts.some(product => productIsShippable(product)) ? "Some options can ship" : "Pickup only"}
           </span>
           <p>${primaryProduct.description || ""}</p>
         </div>
@@ -995,7 +1001,7 @@ function selectedItemsWithDetails() {
       price_cents: product.price_cents,
       capacity_units: capacityUnitsFor(product),
       image_url: cleanText(product.image_url),
-      shippable: Boolean(product.shippable)
+      shippable: productIsShippable(product)
     }))
     .sort((a, b) => compareText(a.name, b.name));
 }
