@@ -154,9 +154,12 @@ function renderInvoice(order) {
         <div><span>Subtotal</span><span>${money(order.subtotal_cents || order.total_cents)}</span></div>
         ${order.discount_cents ? `
           <div class="discount-line">
-            <span>Coupon ${escapeHtml(order.coupon_code || "")} (${couponAppliesToLabel(order.coupon_applies_to)})</span>
+            <span>${order.coupon_code ? `Coupon ${escapeHtml(order.coupon_code)} (${couponAppliesToLabel(order.coupon_applies_to)})` : "Discount"}</span>
             <span>-${money(order.discount_cents)}</span>
           </div>
+        ` : ""}
+        ${order.tip_cents ? `
+          <div><span>Tip</span><span>${money(order.tip_cents)}</span></div>
         ` : ""}
         <div><span>Tax</span><span>${money(order.tax_cents || 0)}</span></div>
         ${order.shipping_cents ? `

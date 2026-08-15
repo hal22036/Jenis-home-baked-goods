@@ -56,6 +56,7 @@ create table if not exists public.orders (
   payment_method text not null check (payment_method in ('Venmo','Zelle','PayPal','CashApp','CashAtPickup')),
   subtotal_cents integer not null default 0,
   discount_cents integer not null default 0 check (discount_cents >= 0),
+  tip_cents integer not null default 0 check (tip_cents >= 0),
   tax_cents integer not null default 0 check (tax_cents >= 0),
   shipping_cents integer not null default 0 check (shipping_cents >= 0),
   coupon_code text references public.coupons(code),
@@ -243,6 +244,9 @@ alter table public.orders
 add column if not exists discount_cents integer not null default 0;
 
 alter table public.orders
+add column if not exists tip_cents integer not null default 0;
+
+alter table public.orders
 add column if not exists tax_cents integer not null default 0;
 
 alter table public.orders
@@ -347,10 +351,11 @@ alter table public.orders
 add constraint orders_discount_cents_check
 check (
   discount_cents >= 0
+  and tip_cents >= 0
   and tax_cents >= 0
   and shipping_cents >= 0
-  and discount_cents <= subtotal_cents + shipping_cents
-  and total_cents = subtotal_cents + tax_cents + shipping_cents - discount_cents
+  and discount_cents <= subtotal_cents + shipping_cents + tip_cents
+  and total_cents = subtotal_cents + tax_cents + shipping_cents + tip_cents - discount_cents
 );
 
 alter table public.orders
@@ -499,6 +504,7 @@ drop function if exists public.admin_update_order_status(uuid,text,text,boolean,
 drop function if exists public.admin_update_order_status(uuid,text,text,boolean,boolean,boolean,text);
 drop function if exists public.admin_update_order_status(uuid,text,text,text,boolean,boolean,boolean,text);
 drop function if exists public.admin_update_order_items(uuid,jsonb);
+drop function if exists public.admin_update_order_items(uuid,integer,integer,jsonb);
 drop function if exists public.admin_archive_orders_for_pickup_date(date);
 drop function if exists public.admin_create_manual_order(uuid,text,text,text,text,text,text,text,integer,jsonb);
 drop function if exists public.admin_create_manual_order(uuid,text,text,text,text,text,text,text,integer,integer,jsonb);
@@ -1060,6 +1066,7 @@ returns table(
   coupon_applies_to text,
   subtotal_cents integer,
   discount_cents integer,
+  tip_cents integer,
   tax_cents integer,
   shipping_cents integer,
   total_cents integer,
@@ -1088,6 +1095,7 @@ begin
     o.coupon_applies_to,
     o.subtotal_cents,
     o.discount_cents,
+    o.tip_cents,
     o.tax_cents,
     o.shipping_cents,
     o.total_cents,
@@ -1139,6 +1147,7 @@ returns table(
   coupon_applies_to text,
   subtotal_cents integer,
   discount_cents integer,
+  tip_cents integer,
   tax_cents integer,
   shipping_cents integer,
   total_cents integer,
@@ -1180,6 +1189,7 @@ begin
     o.coupon_applies_to,
     o.subtotal_cents,
     o.discount_cents,
+    o.tip_cents,
     o.tax_cents,
     o.shipping_cents,
     o.total_cents,
@@ -1271,6 +1281,7 @@ returns table(
   coupon_applies_to text,
   subtotal_cents integer,
   discount_cents integer,
+  tip_cents integer,
   tax_cents integer,
   shipping_cents integer,
   total_cents integer,
@@ -1308,6 +1319,7 @@ begin
     o.coupon_applies_to,
     o.subtotal_cents,
     o.discount_cents,
+    o.tip_cents,
     o.tax_cents,
     o.shipping_cents,
     o.total_cents,
@@ -1420,9 +1432,11 @@ $$;
 
 create or replace function public.admin_update_order_items(
   p_order_id uuid,
+  p_discount_cents integer,
+  p_tip_cents integer,
   p_items jsonb
 )
-returns table(order_id uuid, subtotal_cents integer, tax_cents integer, shipping_cents integer, total_cents integer, total_loaves integer)
+returns table(order_id uuid, subtotal_cents integer, discount_cents integer, tip_cents integer, tax_cents integer, shipping_cents integer, total_cents integer, total_loaves integer)
 language plpgsql
 security definer
 set search_path = public
@@ -1435,7 +1449,8 @@ declare
   v_home_bakery_subtotal integer := 0;
   v_general_product_subtotal integer := 0;
   v_total_loaves integer := 0;
-  v_discount integer := 0;
+  v_discount integer := greatest(coalesce(p_discount_cents, 0), 0);
+  v_tip integer := greatest(coalesce(p_tip_cents, 0), 0);
   v_totals record;
   v_item jsonb;
   v_product_id uuid;
@@ -1456,7 +1471,6 @@ begin
   select
     o.id,
     o.pickup_date_id,
-    o.discount_cents,
     o.coupon_applies_to,
     o.fulfillment_method,
     o.fulfillment_status
@@ -1536,7 +1550,9 @@ begin
     end if;
   end if;
 
-  v_discount := least(greatest(coalesce(v_order.discount_cents, 0), 0), v_subtotal);
+  if v_discount > v_subtotal then
+    raise exception 'Discount cannot be more than the item subtotal';
+  end if;
 
   select *
   into v_totals
@@ -1591,9 +1607,10 @@ begin
   set
     subtotal_cents = v_subtotal,
     discount_cents = v_discount,
+    tip_cents = v_tip,
     tax_cents = v_totals.tax_cents,
     shipping_cents = v_totals.shipping_cents,
-    total_cents = v_totals.final_total_cents,
+    total_cents = v_totals.final_total_cents + v_tip,
     total_loaves = v_total_loaves,
     invoice_sent = false
   where o.id = p_order_id;
@@ -1602,6 +1619,8 @@ begin
   select
     o.id,
     o.subtotal_cents,
+    o.discount_cents,
+    o.tip_cents,
     o.tax_cents,
     o.shipping_cents,
     o.total_cents,
@@ -1610,7 +1629,6 @@ begin
   where o.id = p_order_id;
 end;
 $$;
-
 create or replace function public.admin_archive_orders_for_pickup_date(
   p_pickup_date date
 )
@@ -2306,8 +2324,8 @@ grant execute on function public.admin_list_orders(boolean) to authenticated;
 revoke all on function public.admin_update_order_status(uuid,text,text,text,boolean,boolean,boolean,text) from public;
 grant execute on function public.admin_update_order_status(uuid,text,text,text,boolean,boolean,boolean,text) to authenticated;
 
-revoke all on function public.admin_update_order_items(uuid,jsonb) from public;
-grant execute on function public.admin_update_order_items(uuid,jsonb) to authenticated;
+revoke all on function public.admin_update_order_items(uuid,integer,integer,jsonb) from public;
+grant execute on function public.admin_update_order_items(uuid,integer,integer,jsonb) to authenticated;
 
 revoke all on function public.admin_archive_orders_for_pickup_date(date) from public;
 grant execute on function public.admin_archive_orders_for_pickup_date(date) to authenticated;

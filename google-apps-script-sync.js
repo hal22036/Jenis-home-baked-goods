@@ -97,14 +97,16 @@ function upsertOrdersToSheet(ordersSheet, websiteOrders, existingRows) {
     const fulfillmentStatus = String(order.fulfillment_status || "").toLowerCase();
     const isCanceled = fulfillmentStatus === "canceled";
     const discountCents = Number(order.discount_cents || 0);
+    const tipCents = Number(order.tip_cents || 0);
     const taxCents = Number(order.tax_cents || 0);
     const shippingCents = Number(order.shipping_cents || 0);
-    const adjustmentCents = isCanceled ? 0 : taxCents + shippingCents - discountCents;
+    const adjustmentCents = isCanceled ? 0 : taxCents + shippingCents + tipCents - discountCents;
     const notes = [
       order.notes || "",
       `Method: ${fulfillmentLabel(order.fulfillment_method)}`,
       order.shipping_address ? `Shipping address: ${order.shipping_address}` : "",
-      discountCents ? `Coupon ${order.coupon_code} (${couponAppliesToLabel(order.coupon_applies_to)}): -${money(discountCents)}` : "",
+      discountCents ? `${discountLabel(order)}: -${money(discountCents)}` : "",
+      tipCents ? `Tip: ${money(tipCents)}` : "",
       taxCents ? `Tax: ${money(taxCents)}` : "",
       shippingCents ? `Shipping: ${money(shippingCents)}` : "",
       isCanceled ? "Canceled in website admin" : ""
@@ -209,6 +211,7 @@ function deleteExistingWebsiteOrderItems(sheet, websiteOrderCodes) {
 
 function sheetOrderNotes(order) {
   const discountCents = Number(order.discount_cents || 0);
+  const tipCents = Number(order.tip_cents || 0);
   const taxCents = Number(order.tax_cents || 0);
   const shippingCents = Number(order.shipping_cents || 0);
 
@@ -216,7 +219,8 @@ function sheetOrderNotes(order) {
     order.notes || "",
     `Method: ${fulfillmentLabel(order.fulfillment_method)}`,
     order.shipping_address ? `Shipping address: ${order.shipping_address}` : "",
-    discountCents ? `Coupon ${order.coupon_code} (${couponAppliesToLabel(order.coupon_applies_to)}): -${money(discountCents)}` : "",
+    discountCents ? `${discountLabel(order)}: -${money(discountCents)}` : "",
+    tipCents ? `Tip: ${money(tipCents)}` : "",
     taxCents ? `Tax: ${money(taxCents)}` : "",
     shippingCents ? `Shipping: ${money(shippingCents)}` : "",
     String(order.fulfillment_status || "").toLowerCase() === "canceled" ? "Canceled in website admin" : ""
@@ -305,7 +309,8 @@ function ownerOrderHtml(order) {
     <p><strong>Method:</strong> ${escapeHtml(fulfillmentLabel(order.fulfillment_method))}</p>
     ${order.shipping_address ? `<p><strong>Shipping address:</strong> ${escapeHtml(order.shipping_address)}</p>` : ""}
     ${itemsHtml(order)}
-    ${order.discount_cents ? `<p><strong>Coupon:</strong> ${escapeHtml(order.coupon_code || "")} (${escapeHtml(couponAppliesToLabel(order.coupon_applies_to))}) -${money(order.discount_cents)}</p>` : ""}
+    ${order.discount_cents ? `<p><strong>${escapeHtml(discountLabel(order))}:</strong> -${money(order.discount_cents)}</p>` : ""}
+    ${order.tip_cents ? `<p><strong>Tip:</strong> ${money(order.tip_cents)}</p>` : ""}
     <p><strong>Tax:</strong> ${money(order.tax_cents || 0)}</p>
     ${order.shipping_cents ? `<p><strong>Shipping:</strong> ${money(order.shipping_cents)}</p>` : ""}
     <p><strong>Total:</strong> ${money(order.total_cents)}</p>
@@ -374,7 +379,8 @@ function plainOrderText(order) {
     "",
     plainItemsText(order),
     "",
-    order.discount_cents ? `Coupon ${order.coupon_code || ""} (${couponAppliesToLabel(order.coupon_applies_to)}): -${money(order.discount_cents)}` : "",
+    order.discount_cents ? `${discountLabel(order)}: -${money(order.discount_cents)}` : "",
+    order.tip_cents ? `Tip: ${money(order.tip_cents)}` : "",
     `Tax: ${money(order.tax_cents || 0)}`,
     order.shipping_cents ? `Shipping: ${money(order.shipping_cents)}` : "",
     `Total: ${money(order.total_cents)}`,
@@ -412,6 +418,12 @@ function plainItemsText(order) {
       return `${quantity} x ${item.product_name || ""} - ${money(quantity * Number(item.unit_price_cents || 0))}`;
     })
     .join("\n");
+}
+
+function discountLabel(order) {
+  return order.coupon_code
+    ? `Coupon ${order.coupon_code} (${couponAppliesToLabel(order.coupon_applies_to)})`
+    : "Discount";
 }
 
 function ensureWebsiteSyncColumns(sheet) {

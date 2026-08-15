@@ -332,13 +332,26 @@
 }
 
 .order-items-editor {
-  display: grid;
-  gap: 10px;
   margin-top: 14px;
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface-soft);
+}
+
+.order-items-editor summary {
+  cursor: pointer;
+}
+
+.order-items-editor-body {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.editable-items-toolbar {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .editable-items-heading,
@@ -349,9 +362,14 @@
   gap: 12px;
 }
 
-.order-item-edit-list {
+.order-item-edit-list,
+.order-adjustments-grid {
   display: grid;
   gap: 10px;
+}
+
+.order-adjustments-grid {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 220px));
 }
 
 .order-item-edit-row {

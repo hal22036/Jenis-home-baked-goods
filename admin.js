@@ -780,7 +780,8 @@ function orderCardMarkup(order) {
         <div><dt>Method</dt><dd>${fulfillmentLabel(order.fulfillment_method)}</dd></div>
         <div><dt>Receipt email</dt><dd>${invoiceStatusLabel(order)}</dd></div>
         <div><dt>Loaf spots</dt><dd>${order.total_loaves}</dd></div>
-        ${order.discount_cents ? `<div><dt>Coupon</dt><dd>${order.coupon_code} (${couponAppliesToLabel(order.coupon_applies_to)}) -${money(order.discount_cents)}</dd></div>` : ""}
+        ${order.discount_cents ? `<div><dt>Discount</dt><dd>${order.coupon_code ? `${order.coupon_code} (${couponAppliesToLabel(order.coupon_applies_to)}) ` : ""}-${money(order.discount_cents)}</dd></div>` : ""}
+        ${order.tip_cents ? `<div><dt>Tip</dt><dd>${money(order.tip_cents)}</dd></div>` : ""}
         <div><dt>Tax</dt><dd>${money(order.tax_cents || 0)}</dd></div>
         ${order.shipping_cents ? `<div><dt>Shipping</dt><dd>${money(order.shipping_cents)}</dd></div>` : ""}
       </dl>
@@ -798,19 +799,36 @@ function orderCardMarkup(order) {
         `).join("")}
       </div>
 
-      <section class="order-items-editor" data-order-items-editor>
-        <div class="editable-items-heading">
-          <strong>Edit order items</strong>
+      <details class="order-items-editor" data-order-items-editor>
+        <summary class="editable-items-heading">
+          <strong>Edit items, discount, or tip</strong>
+        </summary>
+        <div class="order-items-editor-body">
+        <div class="editable-items-toolbar">
           <button class="secondary-button compact-button" type="button" data-add-order-item>Add item</button>
         </div>
         <div class="order-item-edit-list" data-order-item-edit-list>
           ${(order.items || []).map(item => orderItemEditRowMarkup(item)).join("")}
         </div>
-        <div class="order-edit-total">
-          <span>Edited item subtotal</span>
-          <strong data-order-items-preview>${money(order.subtotal_cents)}</strong>
+        <div class="order-adjustments-grid">
+          <label>
+            Discount
+            <input data-order-discount type="number" min="0" step="0.01" value="${centsToDollars(order.discount_cents || 0)}" />
+          </label>
+          <label>
+            Tip
+            <input data-order-tip type="number" min="0" step="0.01" value="${centsToDollars(order.tip_cents || 0)}" />
+          </label>
         </div>
-      </section>
+        <div class="order-edit-total">
+          <span>Edited total before tax/shipping</span>
+          <strong data-order-items-preview>${money(Math.max((order.subtotal_cents || 0) - (order.discount_cents || 0), 0) + (order.tip_cents || 0))}</strong>
+        </div>
+        <button class="secondary-button compact-button" type="button" data-save-order-items>
+          Save item changes
+        </button>
+        </div>
+      </details>
 
       ${order.notes ? `<p class="admin-notes"><strong>Questions/comments:</strong> ${order.notes}</p>` : ""}
 
@@ -863,9 +881,6 @@ function orderCardMarkup(order) {
         </a>
         <button class="secondary-button compact-button" type="button" data-save-order>
           Save order status
-        </button>
-        <button class="secondary-button compact-button" type="button" data-save-order-items>
-          Save item changes
         </button>
       </div>
       <p class="message" data-order-message></p>
@@ -1008,7 +1023,9 @@ function updateOrderItemsPreview(event) {
   const card = editor.closest("[data-order-id]");
   const items = orderItemsFromCard(card);
   const subtotal = items.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.unit_price_cents || 0), 0);
-  editor.querySelector("[data-order-items-preview]").textContent = money(subtotal);
+  const discount = Math.min(dollarsToCents(card.querySelector("[data-order-discount]").value), subtotal);
+  const tip = dollarsToCents(card.querySelector("[data-order-tip]").value);
+  editor.querySelector("[data-order-items-preview]").textContent = money(Math.max(subtotal - discount, 0) + tip);
 }
 
 function option(value, label, selected) {
@@ -1115,6 +1132,9 @@ async function saveOrderItems(event) {
   const message = card.querySelector("[data-order-message]");
   const button = event.currentTarget;
   const items = orderItemsFromCard(card);
+  const subtotal = items.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.unit_price_cents || 0), 0);
+  const discountCents = dollarsToCents(card.querySelector("[data-order-discount]").value);
+  const tipCents = dollarsToCents(card.querySelector("[data-order-tip]").value);
   const invalidItem = items.find(item =>
     (!item.product_id && !item.name) || item.quantity <= 0 || item.unit_price_cents < 0 || item.loaf_spots < 0
   );
@@ -1124,11 +1144,23 @@ async function saveOrderItems(event) {
     return;
   }
 
+  if (discountCents > subtotal) {
+    setMessage(message, "Discount cannot be more than the item subtotal.", "error");
+    return;
+  }
+
+  if (tipCents < 0) {
+    setMessage(message, "Tip cannot be negative.", "error");
+    return;
+  }
+
   button.disabled = true;
   setMessage(message, "Saving item changes...");
 
   const { data, error } = await supabaseClient.rpc("admin_update_order_items", {
     p_order_id: card.dataset.orderId,
+    p_discount_cents: discountCents,
+    p_tip_cents: tipCents,
     p_items: items
   });
 
