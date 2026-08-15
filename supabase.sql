@@ -476,6 +476,7 @@ drop function if exists public.admin_update_order_status(uuid,text,text,boolean)
 drop function if exists public.admin_update_order_status(uuid,text,text,boolean,boolean);
 drop function if exists public.admin_update_order_status(uuid,text,text,boolean,boolean,boolean,text);
 drop function if exists public.admin_update_order_status(uuid,text,text,text,boolean,boolean,boolean,text);
+drop function if exists public.admin_archive_orders_for_pickup_date(date);
 drop function if exists public.admin_create_manual_order(uuid,text,text,text,text,text,text,text,integer,jsonb);
 drop function if exists public.admin_create_manual_order(uuid,text,text,text,text,text,text,text,integer,integer,jsonb);
 drop function if exists public.admin_list_pickup_dates();
@@ -1391,6 +1392,37 @@ begin
 end;
 $$;
 
+create or replace function public.admin_archive_orders_for_pickup_date(
+  p_pickup_date date
+)
+returns table(pickup_date date, archived_count integer)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Admin access required';
+  end if;
+
+  if p_pickup_date is null then
+    raise exception 'Pickup date is required';
+  end if;
+
+  update public.orders as o
+  set archived = true
+  from public.pickup_dates as d
+  where d.id = o.pickup_date_id
+    and d.pickup_date = p_pickup_date
+    and o.archived = false;
+
+  get diagnostics archived_count = row_count;
+  pickup_date := p_pickup_date;
+
+  return next;
+end;
+$$;
+
 create or replace function public.admin_create_manual_order(
   p_pickup_date_id uuid,
   p_customer_name text,
@@ -2050,6 +2082,9 @@ grant execute on function public.admin_list_orders(boolean) to authenticated;
 
 revoke all on function public.admin_update_order_status(uuid,text,text,text,boolean,boolean,boolean,text) from public;
 grant execute on function public.admin_update_order_status(uuid,text,text,text,boolean,boolean,boolean,text) to authenticated;
+
+revoke all on function public.admin_archive_orders_for_pickup_date(date) from public;
+grant execute on function public.admin_archive_orders_for_pickup_date(date) to authenticated;
 
 revoke all on function public.admin_create_manual_order(uuid,text,text,text,text,text,text,text,integer,integer,jsonb) from public;
 grant execute on function public.admin_create_manual_order(uuid,text,text,text,text,text,text,text,integer,integer,jsonb) to authenticated;

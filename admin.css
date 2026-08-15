@@ -229,6 +229,10 @@
   font-weight: 800;
 }
 
+.archive-date-button {
+  flex: 0 0 auto;
+}
+
 .order-heading,
 .order-summary,
 .pickup-date-row,
@@ -567,6 +571,7 @@
   }
 
   .admin-toolbar,
+  .order-date-heading,
   .pickup-date-row,
   .admin-product-row,
   .coupon-row,
@@ -588,6 +593,10 @@
     justify-items: start;
     margin-left: 0;
     text-align: left;
+  }
+
+  .archive-date-button {
+    width: 100%;
   }
 
   .manual-item-row {
@@ -620,10 +629,6 @@
 
   .admin-order-actions,
   .coupon-row-actions {
-    display: grid;
-  }
-
-  .order-date-heading {
     display: grid;
   }
 

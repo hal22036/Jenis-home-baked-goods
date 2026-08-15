@@ -625,8 +625,11 @@ function renderOrders() {
   el.ordersList.innerHTML = [...ordersByPickupDate.entries()].map(([pickupDate, dateOrders]) => `
     <section class="order-date-group">
       <div class="order-date-heading">
-        <h3>${prettyDate(pickupDate)}</h3>
-        <span>${dateOrders.length} order${dateOrders.length === 1 ? "" : "s"}</span>
+        <div>
+          <h3>${prettyDate(pickupDate)}</h3>
+          <span>${dateOrders.length} order${dateOrders.length === 1 ? "" : "s"}</span>
+        </div>
+        ${archivePickupDateButtonMarkup(pickupDate)}
       </div>
       ${bakingBreakdownMarkup(dateOrders)}
       <div class="orders-list">
@@ -644,6 +647,27 @@ function renderOrders() {
   el.ordersList.querySelectorAll("[data-save-order]").forEach(button => {
     button.addEventListener("click", saveOrderStatus);
   });
+
+  el.ordersList.querySelectorAll("[data-archive-pickup-date]").forEach(button => {
+    button.addEventListener("click", archivePickupDateOrders);
+  });
+}
+
+function archivePickupDateButtonMarkup(pickupDate) {
+  const archiveCount = state.orders.filter(order =>
+    order.pickup_date === pickupDate && !order.archived
+  ).length;
+
+  return `
+    <button
+      class="secondary-button compact-button archive-date-button"
+      type="button"
+      data-archive-pickup-date="${pickupDate}"
+      ${archiveCount ? "" : "disabled"}
+    >
+      Archive ${archiveCount || "all"} order${archiveCount === 1 ? "" : "s"} for this date
+    </button>
+  `;
 }
 
 function bakingBreakdownMarkup(orders) {
@@ -916,6 +940,43 @@ async function saveOrderStatus(event) {
 
   setMessage(message, "Saved.", "success");
   await Promise.all([loadOrders(), loadPickupDates()]);
+}
+
+async function archivePickupDateOrders(event) {
+  const button = event.currentTarget;
+  const pickupDate = button.dataset.archivePickupDate;
+  const archiveCount = state.orders.filter(order =>
+    order.pickup_date === pickupDate && !order.archived
+  ).length;
+
+  if (!archiveCount) return;
+
+  const confirmed = window.confirm(
+    `Archive ${archiveCount} order${archiveCount === 1 ? "" : "s"} for ${prettyDate(pickupDate)}?`
+  );
+
+  if (!confirmed) return;
+
+  button.disabled = true;
+  setMessage(el.adminMessage, `Archiving orders for ${prettyDate(pickupDate)}...`);
+
+  const { data, error } = await supabaseClient.rpc("admin_archive_orders_for_pickup_date", {
+    p_pickup_date: pickupDate
+  });
+
+  if (error) {
+    button.disabled = false;
+    setMessage(el.adminMessage, error.message, "error");
+    return;
+  }
+
+  const result = Array.isArray(data) ? data[0] : data;
+  setMessage(
+    el.adminMessage,
+    `Archived ${result?.archived_count || archiveCount} order${(result?.archived_count || archiveCount) === 1 ? "" : "s"} for ${prettyDate(pickupDate)}.`,
+    "success"
+  );
+  await loadOrders();
 }
 
 async function loadPickupDates() {
