@@ -1,5 +1,6 @@
 const SUPABASE_URL = "https://qvxrbipxxlygmmecgjxf.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_-w4Ef_bqgM_l9bY00thSpg_xohk7e9M";
+const GOOGLE_SHEET_SYNC_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyJTozS6WSp7erGyN29THQlTL34vYBCKwc-txqpn67_Jtd1W_3kuO43A_Y_x7NCNtBl/exec";
 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -58,6 +59,7 @@ const el = {
   manualOrderAfterDiscount: document.querySelector("#manual-order-after-discount"),
   manualOrderLoafSpots: document.querySelector("#manual-order-loaf-spots"),
   manualOrderMessage: document.querySelector("#manual-order-message"),
+  syncGoogleSheet: document.querySelector("#sync-google-sheet"),
   refreshOrders: document.querySelector("#refresh-orders"),
   refreshProducts: document.querySelector("#refresh-products"),
   refreshCoupons: document.querySelector("#refresh-coupons"),
@@ -263,6 +265,7 @@ el.refreshOrders.addEventListener("click", () => {
   loadProducts();
 });
 
+el.syncGoogleSheet.addEventListener("click", syncGoogleSheetNow);
 el.refreshProducts.addEventListener("click", loadProducts);
 el.taxSettingsForm.addEventListener("submit", saveTaxSettings);
 el.refreshCoupons.addEventListener("click", loadCoupons);
@@ -297,6 +300,42 @@ el.manualItemsList.addEventListener("click", event => {
   updateManualOrderSubtotal();
 });
 el.manualOrderForm.addEventListener("submit", saveManualOrder);
+
+async function syncGoogleSheetNow() {
+  if (!GOOGLE_SHEET_SYNC_WEB_APP_URL) {
+    setMessage(el.adminMessage, "Add your Google Apps Script web app URL before using Sync Google Sheet.", "error");
+    return;
+  }
+
+  const { data } = await supabaseClient.auth.getSession();
+  if (!data.session?.access_token) {
+    setMessage(el.adminMessage, "Please sign in again before syncing Google Sheets.", "error");
+    return;
+  }
+
+  el.syncGoogleSheet.disabled = true;
+  setMessage(el.adminMessage, "Sending Google Sheet sync request...");
+
+  try {
+    await fetch(GOOGLE_SHEET_SYNC_WEB_APP_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8"
+      },
+      body: JSON.stringify({
+        access_token: data.session.access_token,
+        requested_at: new Date().toISOString()
+      })
+    });
+
+    setMessage(el.adminMessage, "Google Sheet sync request sent. Give it a minute, then check the sheet.", "success");
+  } catch (error) {
+    setMessage(el.adminMessage, `Could not send Google Sheet sync request: ${error.message}`, "error");
+  } finally {
+    el.syncGoogleSheet.disabled = false;
+  }
+}
 
 function renderManualOrderDateOptions() {
   if (!el.manualPickupDate) return;

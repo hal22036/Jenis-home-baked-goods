@@ -18,6 +18,75 @@ function onOpen() {
     .addToUi();
 }
 
+function doPost(event) {
+  try {
+    const payload = parseSyncRequestPayload(event);
+    validateAdminSyncRequest(payload.access_token);
+    syncWebsiteOrdersWithLock();
+
+    return jsonResponse({
+      ok: true,
+      synced_at: new Date().toISOString()
+    });
+  } catch (error) {
+    return jsonResponse({
+      ok: false,
+      error: error.message || String(error)
+    });
+  }
+}
+
+function parseSyncRequestPayload(event) {
+  const rawBody = event?.postData?.contents || "{}";
+  const payload = JSON.parse(rawBody);
+
+  if (!payload.access_token) {
+    throw new Error("Missing admin access token.");
+  }
+
+  return payload;
+}
+
+function validateAdminSyncRequest(accessToken) {
+  const response = UrlFetchApp.fetch(`${SUPABASE_URL}/rest/v1/rpc/admin_list_orders`, {
+    method: "post",
+    contentType: "application/json",
+    headers: {
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${accessToken}`
+    },
+    payload: JSON.stringify({
+      p_include_archived: false
+    }),
+    muteHttpExceptions: true
+  });
+
+  const statusCode = response.getResponseCode();
+  if (statusCode < 200 || statusCode >= 300) {
+    throw new Error("Admin access required for manual Google Sheet sync.");
+  }
+}
+
+function syncWebsiteOrdersWithLock() {
+  const lock = LockService.getScriptLock();
+
+  if (!lock.tryLock(10000)) {
+    throw new Error("A Google Sheet sync is already running. Try again in a minute.");
+  }
+
+  try {
+    syncWebsiteOrders();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function jsonResponse(data) {
+  return ContentService
+    .createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
 function syncWebsiteOrders() {
   Logger.log("Sync started");
 
@@ -58,7 +127,7 @@ function syncWebsiteOrders() {
 
 function syncWebsiteOrdersSafe() {
   try {
-    syncWebsiteOrders();
+    syncWebsiteOrdersWithLock();
   } catch (error) {
     MailApp.sendEmail({
       to: OWNER_EMAIL,

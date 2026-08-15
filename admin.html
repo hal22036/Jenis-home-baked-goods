@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bakery Admin | Jeni's Home Baked Goods</title>
   <link rel="stylesheet" href="styles.css?v=20260810-admin-pages" />
-  <link rel="stylesheet" href="admin.css?v=20260815-edit-order-items" />
+  <link rel="stylesheet" href="admin.css?v=20260815-google-sheet-sync" />
 </head>
 <body>
   <header class="site-header admin-header">
@@ -54,6 +54,7 @@
             <input id="include-archived" type="checkbox" />
             Show archived
           </label>
+          <button class="secondary-button compact-button" type="button" id="sync-google-sheet">Sync Google Sheet</button>
           <button class="secondary-button compact-button" type="button" id="refresh-orders">Refresh</button>
         </div>
       </div>
@@ -351,6 +352,6 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="admin.js?v=20260815-edit-order-adjustments"></script>
+  <script src="admin.js?v=20260815-google-sheet-sync"></script>
 </body>
 </html>
