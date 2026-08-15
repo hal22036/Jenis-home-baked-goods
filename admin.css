@@ -331,6 +331,51 @@
   border-bottom: 1px solid var(--border);
 }
 
+.order-items-editor {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.editable-items-heading,
+.order-edit-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.order-item-edit-list {
+  display: grid;
+  gap: 10px;
+}
+
+.order-item-edit-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) minmax(180px, 1fr) minmax(76px, 0.35fr) minmax(105px, 0.45fr) minmax(145px, 0.8fr) minmax(105px, 0.45fr) minmax(100px, auto);
+  align-items: end;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fffdf9;
+}
+
+.order-item-custom-field[hidden],
+.order-item-tax-field[hidden],
+.order-item-loaf-field[hidden] {
+  display: none;
+}
+
+.order-edit-total {
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
 .admin-notes {
   padding: 12px;
   border-radius: 8px;
@@ -578,6 +623,8 @@
   .order-heading,
   .order-summary,
   .admin-items div,
+  .editable-items-heading,
+  .order-edit-total,
   .manual-items-heading,
   .manual-order-total {
     display: grid;
@@ -600,6 +647,10 @@
   }
 
   .manual-item-row {
+    grid-template-columns: 1fr;
+  }
+
+  .order-item-edit-row {
     grid-template-columns: 1fr;
   }
 

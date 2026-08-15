@@ -74,6 +74,8 @@ create table if not exists public.order_items (
   order_id uuid not null references public.orders(id) on delete cascade,
   product_id uuid references public.products(id),
   custom_name text,
+  custom_tax_category text not null default 'home_bakery' check (custom_tax_category in ('home_bakery','general_product')),
+  custom_capacity_units integer not null default 0 check (custom_capacity_units >= 0),
   quantity integer not null check (quantity > 0),
   unit_price_cents integer not null check (unit_price_cents >= 0)
 );
@@ -191,6 +193,26 @@ alter column product_id drop not null;
 
 alter table public.order_items
 add column if not exists custom_name text;
+
+alter table public.order_items
+add column if not exists custom_tax_category text not null default 'home_bakery';
+
+alter table public.order_items
+add column if not exists custom_capacity_units integer not null default 0;
+
+alter table public.order_items
+drop constraint if exists order_items_custom_tax_category_check;
+
+alter table public.order_items
+add constraint order_items_custom_tax_category_check
+check (custom_tax_category in ('home_bakery','general_product'));
+
+alter table public.order_items
+drop constraint if exists order_items_custom_capacity_units_check;
+
+alter table public.order_items
+add constraint order_items_custom_capacity_units_check
+check (custom_capacity_units >= 0);
 
 alter table public.order_items
 drop constraint if exists order_items_product_or_custom_check;
@@ -476,6 +498,7 @@ drop function if exists public.admin_update_order_status(uuid,text,text,boolean)
 drop function if exists public.admin_update_order_status(uuid,text,text,boolean,boolean);
 drop function if exists public.admin_update_order_status(uuid,text,text,boolean,boolean,boolean,text);
 drop function if exists public.admin_update_order_status(uuid,text,text,text,boolean,boolean,boolean,text);
+drop function if exists public.admin_update_order_items(uuid,jsonb);
 drop function if exists public.admin_archive_orders_for_pickup_date(date);
 drop function if exists public.admin_create_manual_order(uuid,text,text,text,text,text,text,text,integer,jsonb);
 drop function if exists public.admin_create_manual_order(uuid,text,text,text,text,text,text,text,integer,integer,jsonb);
@@ -1295,10 +1318,13 @@ begin
     coalesce(
       jsonb_agg(
         jsonb_build_object(
+          'id', oi.id,
+          'product_id', oi.product_id,
           'name', coalesce(oi.custom_name, p.name),
           'quantity', oi.quantity,
           'unit_price_cents', oi.unit_price_cents,
-          'capacity_units', coalesce(p.capacity_units, 0),
+          'tax_category', coalesce(p.tax_category, oi.custom_tax_category, 'home_bakery'),
+          'capacity_units', coalesce(p.capacity_units, oi.custom_capacity_units, 0),
           'category', p.category,
           'display_group', p.display_group,
           'option_label', p.option_label,
@@ -1388,6 +1414,199 @@ begin
     o.invoice_sent,
     o.customer_email
   from orders o
+  where o.id = p_order_id;
+end;
+$$;
+
+create or replace function public.admin_update_order_items(
+  p_order_id uuid,
+  p_items jsonb
+)
+returns table(order_id uuid, subtotal_cents integer, tax_cents integer, shipping_cents integer, total_cents integer, total_loaves integer)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_order record;
+  v_capacity integer;
+  v_existing_loaves integer;
+  v_subtotal integer := 0;
+  v_home_bakery_subtotal integer := 0;
+  v_general_product_subtotal integer := 0;
+  v_total_loaves integer := 0;
+  v_discount integer := 0;
+  v_totals record;
+  v_item jsonb;
+  v_product_id uuid;
+  v_custom_name text;
+  v_tax_category text;
+  v_quantity integer;
+  v_unit_price_cents integer;
+  v_loaf_spots integer;
+begin
+  if not public.is_admin() then
+    raise exception 'Admin access required';
+  end if;
+
+  if coalesce(jsonb_typeof(p_items), '') <> 'array' or jsonb_array_length(p_items) = 0 then
+    raise exception 'Add at least one order item';
+  end if;
+
+  select
+    o.id,
+    o.pickup_date_id,
+    o.discount_cents,
+    o.coupon_applies_to,
+    o.fulfillment_method,
+    o.fulfillment_status
+  into v_order
+  from public.orders o
+  where o.id = p_order_id
+  for update;
+
+  if v_order.id is null then
+    raise exception 'Order not found';
+  end if;
+
+  select capacity
+  into v_capacity
+  from public.pickup_dates
+  where id = v_order.pickup_date_id
+  for update;
+
+  for v_item in select * from jsonb_array_elements(p_items)
+  loop
+    v_product_id := null;
+    v_custom_name := nullif(trim(coalesce(v_item->>'name', '')), '');
+    v_quantity := coalesce((v_item->>'quantity')::integer, 0);
+    v_unit_price_cents := coalesce((v_item->>'unit_price_cents')::integer, 0);
+    v_loaf_spots := greatest(coalesce((v_item->>'loaf_spots')::integer, 0), 0);
+    v_tax_category := lower(trim(coalesce(v_item->>'tax_category', 'home_bakery')));
+
+    if nullif(trim(coalesce(v_item->>'product_id', '')), '') is not null then
+      v_product_id := (v_item->>'product_id')::uuid;
+
+      select
+        coalesce(p.tax_category, 'home_bakery'),
+        greatest(coalesce(p.capacity_units, 0), 0) * greatest(v_quantity, 0)
+      into v_tax_category, v_loaf_spots
+      from public.products p
+      where p.id = v_product_id;
+
+      if v_tax_category is null then
+        raise exception 'Product not found';
+      end if;
+    elsif v_custom_name is null then
+      raise exception 'Each custom item needs a name';
+    end if;
+
+    if v_quantity <= 0 then
+      raise exception 'Each item quantity must be at least 1';
+    end if;
+
+    if v_unit_price_cents < 0 then
+      raise exception 'Item prices cannot be negative';
+    end if;
+
+    if v_tax_category not in ('home_bakery','general_product') then
+      raise exception 'Invalid item tax type';
+    end if;
+
+    v_subtotal := v_subtotal + (v_quantity * v_unit_price_cents);
+    v_total_loaves := v_total_loaves + v_loaf_spots;
+
+    if v_tax_category = 'general_product' then
+      v_general_product_subtotal := v_general_product_subtotal + (v_quantity * v_unit_price_cents);
+    else
+      v_home_bakery_subtotal := v_home_bakery_subtotal + (v_quantity * v_unit_price_cents);
+    end if;
+  end loop;
+
+  if v_order.fulfillment_status <> 'canceled' then
+    select coalesce(sum(o.total_loaves), 0)
+    into v_existing_loaves
+    from public.orders o
+    where o.pickup_date_id = v_order.pickup_date_id
+      and o.id <> p_order_id
+      and o.fulfillment_status <> 'canceled';
+
+    if v_existing_loaves + v_total_loaves > v_capacity then
+      raise exception 'This pickup date only has % loaf spots left', greatest(v_capacity - v_existing_loaves, 0);
+    end if;
+  end if;
+
+  v_discount := least(greatest(coalesce(v_order.discount_cents, 0), 0), v_subtotal);
+
+  select *
+  into v_totals
+  from public.calculate_order_totals(
+    v_subtotal,
+    v_home_bakery_subtotal,
+    v_general_product_subtotal,
+    v_discount,
+    coalesce(v_order.coupon_applies_to, 'items'),
+    v_order.fulfillment_method,
+    null
+  );
+
+  delete from public.order_items
+  where order_items.order_id = p_order_id;
+
+  for v_item in select * from jsonb_array_elements(p_items)
+  loop
+    v_product_id := null;
+    v_custom_name := nullif(trim(coalesce(v_item->>'name', '')), '');
+
+    if nullif(trim(coalesce(v_item->>'product_id', '')), '') is not null then
+      v_product_id := (v_item->>'product_id')::uuid;
+      v_custom_name := null;
+    end if;
+
+    insert into public.order_items (
+      order_id,
+      product_id,
+      custom_name,
+      custom_tax_category,
+      custom_capacity_units,
+      quantity,
+      unit_price_cents
+    )
+    values (
+      p_order_id,
+      v_product_id,
+      v_custom_name,
+      lower(trim(coalesce(v_item->>'tax_category', 'home_bakery'))),
+      case
+        when v_product_id is null
+          then (greatest(coalesce((v_item->>'loaf_spots')::integer, 0), 0) / greatest((v_item->>'quantity')::integer, 1))::integer
+        else 0
+      end,
+      (v_item->>'quantity')::integer,
+      (v_item->>'unit_price_cents')::integer
+    );
+  end loop;
+
+  update public.orders as o
+  set
+    subtotal_cents = v_subtotal,
+    discount_cents = v_discount,
+    tax_cents = v_totals.tax_cents,
+    shipping_cents = v_totals.shipping_cents,
+    total_cents = v_totals.final_total_cents,
+    total_loaves = v_total_loaves,
+    invoice_sent = false
+  where o.id = p_order_id;
+
+  return query
+  select
+    o.id,
+    o.subtotal_cents,
+    o.tax_cents,
+    o.shipping_cents,
+    o.total_cents,
+    o.total_loaves
+  from public.orders o
   where o.id = p_order_id;
 end;
 $$;
@@ -1597,6 +1816,8 @@ begin
       order_id,
       product_id,
       custom_name,
+      custom_tax_category,
+      custom_capacity_units,
       quantity,
       unit_price_cents
     )
@@ -1604,6 +1825,8 @@ begin
       v_order_id,
       null,
       trim(v_item->>'name'),
+      lower(trim(coalesce(v_item->>'tax_category', 'home_bakery'))),
+      (greatest(coalesce((v_item->>'loaf_spots')::integer, 0), 0) / greatest((v_item->>'quantity')::integer, 1))::integer,
       (v_item->>'quantity')::integer,
       (v_item->>'unit_price_cents')::integer
     );
@@ -2082,6 +2305,9 @@ grant execute on function public.admin_list_orders(boolean) to authenticated;
 
 revoke all on function public.admin_update_order_status(uuid,text,text,text,boolean,boolean,boolean,text) from public;
 grant execute on function public.admin_update_order_status(uuid,text,text,text,boolean,boolean,boolean,text) to authenticated;
+
+revoke all on function public.admin_update_order_items(uuid,jsonb) from public;
+grant execute on function public.admin_update_order_items(uuid,jsonb) to authenticated;
 
 revoke all on function public.admin_archive_orders_for_pickup_date(date) from public;
 grant execute on function public.admin_archive_orders_for_pickup_date(date) to authenticated;

@@ -367,7 +367,7 @@ function addManualItemRow(item = {}) {
 
 function manualProductOptions(selectedProductId) {
   return state.products
-    .filter(product => product.active)
+    .filter(product => product.active || product.id === selectedProductId)
     .map(product => {
       const label = product.display_group && product.option_label
         ? `${product.display_group} - ${product.option_label}`
@@ -648,6 +648,20 @@ function renderOrders() {
     button.addEventListener("click", saveOrderStatus);
   });
 
+  el.ordersList.querySelectorAll("[data-save-order-items]").forEach(button => {
+    button.addEventListener("click", saveOrderItems);
+  });
+
+  el.ordersList.querySelectorAll("[data-add-order-item]").forEach(button => {
+    button.addEventListener("click", addOrderItemToCard);
+  });
+
+  el.ordersList.querySelectorAll("[data-order-items-editor]").forEach(editor => {
+    editor.addEventListener("input", updateOrderItemsPreview);
+    editor.addEventListener("change", handleOrderItemEditorChange);
+    editor.addEventListener("click", removeOrderItemFromCard);
+  });
+
   el.ordersList.querySelectorAll("[data-archive-pickup-date]").forEach(button => {
     button.addEventListener("click", archivePickupDateOrders);
   });
@@ -784,6 +798,20 @@ function orderCardMarkup(order) {
         `).join("")}
       </div>
 
+      <section class="order-items-editor" data-order-items-editor>
+        <div class="editable-items-heading">
+          <strong>Edit order items</strong>
+          <button class="secondary-button compact-button" type="button" data-add-order-item>Add item</button>
+        </div>
+        <div class="order-item-edit-list" data-order-item-edit-list>
+          ${(order.items || []).map(item => orderItemEditRowMarkup(item)).join("")}
+        </div>
+        <div class="order-edit-total">
+          <span>Edited item subtotal</span>
+          <strong data-order-items-preview>${money(order.subtotal_cents)}</strong>
+        </div>
+      </section>
+
       ${order.notes ? `<p class="admin-notes"><strong>Questions/comments:</strong> ${order.notes}</p>` : ""}
 
       <div class="status-grid">
@@ -836,11 +864,151 @@ function orderCardMarkup(order) {
         <button class="secondary-button compact-button" type="button" data-save-order>
           Save order status
         </button>
+        <button class="secondary-button compact-button" type="button" data-save-order-items>
+          Save item changes
+        </button>
       </div>
       <p class="message" data-order-message></p>
       </div>
     </details>
   `;
+}
+
+function orderItemEditRowMarkup(item = {}) {
+  const selectedProductId = item.product_id || "other";
+  const product = productById(selectedProductId);
+  const isOther = selectedProductId === "other" || !product;
+  const itemName = item.name || "";
+  const taxCategory = item.tax_category || product?.tax_category || "home_bakery";
+  const capacityUnits = item.capacity_units ?? product?.capacity_units ?? 0;
+
+  return `
+    <div class="order-item-edit-row" data-order-item-edit-row>
+      <label class="order-item-product-field">
+        Product
+        <select data-order-item-product>
+          <option value="">Choose product</option>
+          ${manualProductOptions(selectedProductId)}
+          <option value="other" ${isOther ? "selected" : ""}>Other / custom item</option>
+        </select>
+      </label>
+      <label class="order-item-custom-field" ${isOther ? "" : "hidden"}>
+        Custom item
+        <input data-order-item-name value="${escapeAttribute(itemName)}" placeholder="Special order" />
+      </label>
+      <label>
+        Qty
+        <input data-order-item-quantity type="number" min="1" step="1" value="${item.quantity || 1}" />
+      </label>
+      <label>
+        Price each
+        <input data-order-item-price type="number" min="0" step="0.01" value="${centsToDollars(item.unit_price_cents || product?.price_cents || 0)}" />
+      </label>
+      <label class="order-item-tax-field" ${isOther ? "" : "hidden"}>
+        Tax type
+        <select data-order-item-tax-category>
+          ${option("home_bakery", "Home bakery food", taxCategory)}
+          ${option("general_product", "General product", taxCategory)}
+        </select>
+      </label>
+      <label class="order-item-loaf-field" ${isOther ? "" : "hidden"}>
+        Loaf spots each
+        <input data-order-item-loaf-spots type="number" min="0" step="1" value="${capacityUnits}" />
+      </label>
+      <button class="secondary-button compact-button danger-button" type="button" data-remove-order-item>Remove</button>
+    </div>
+  `;
+}
+
+function addOrderItemToCard(event) {
+  const card = event.currentTarget.closest("[data-order-id]");
+  const list = card.querySelector("[data-order-item-edit-list]");
+  list.insertAdjacentHTML("beforeend", orderItemEditRowMarkup());
+  updateOrderItemsPreview({ currentTarget: card.querySelector("[data-order-items-editor]") });
+}
+
+function removeOrderItemFromCard(event) {
+  const button = event.target.closest("[data-remove-order-item]");
+  if (!button) return;
+
+  const editor = event.currentTarget;
+  button.closest("[data-order-item-edit-row]").remove();
+
+  if (!editor.querySelector("[data-order-item-edit-row]")) {
+    editor.querySelector("[data-order-item-edit-list]").insertAdjacentHTML("beforeend", orderItemEditRowMarkup());
+  }
+
+  updateOrderItemsPreview({ currentTarget: editor });
+}
+
+function handleOrderItemEditorChange(event) {
+  const select = event.target.closest("[data-order-item-product]");
+  if (select) {
+    syncOrderItemEditRow(select.closest("[data-order-item-edit-row]"));
+  }
+
+  updateOrderItemsPreview(event);
+}
+
+function syncOrderItemEditRow(row) {
+  const productSelect = row.querySelector("[data-order-item-product]");
+  const customField = row.querySelector(".order-item-custom-field");
+  const customName = row.querySelector("[data-order-item-name]");
+  const taxField = row.querySelector(".order-item-tax-field");
+  const loafField = row.querySelector(".order-item-loaf-field");
+  const priceInput = row.querySelector("[data-order-item-price]");
+  const taxCategory = row.querySelector("[data-order-item-tax-category]");
+  const loafSpots = row.querySelector("[data-order-item-loaf-spots]");
+  const product = productById(productSelect.value);
+  const isOther = productSelect.value === "other" || !product;
+
+  customField.hidden = !isOther;
+  taxField.hidden = !isOther;
+  loafField.hidden = !isOther;
+  customName.required = isOther;
+
+  if (product) {
+    customName.value = "";
+    priceInput.value = centsToDollars(product.price_cents);
+    taxCategory.value = product.tax_category || "home_bakery";
+    loafSpots.value = product.capacity_units || 0;
+  }
+}
+
+function orderItemsFromCard(card) {
+  return [...card.querySelectorAll("[data-order-item-edit-row]")]
+    .map(row => {
+      const selectedProductId = row.querySelector("[data-order-item-product]").value;
+      const product = productById(selectedProductId);
+      const isOther = selectedProductId === "other" || !product;
+      const quantity = Number(row.querySelector("[data-order-item-quantity]").value || 0);
+      const unitPriceCents = dollarsToCents(row.querySelector("[data-order-item-price]").value);
+      const loafSpotsEach = isOther
+        ? Number(row.querySelector("[data-order-item-loaf-spots]").value || 0)
+        : Number(product.capacity_units || 0);
+
+      return {
+        product_id: isOther ? null : selectedProductId,
+        name: isOther ? row.querySelector("[data-order-item-name]").value.trim() : "",
+        quantity,
+        unit_price_cents: unitPriceCents,
+        tax_category: isOther ? row.querySelector("[data-order-item-tax-category]").value : (product.tax_category || "home_bakery"),
+        loaf_spots: quantity * loafSpotsEach
+      };
+    })
+    .filter(item => item.product_id || item.name || item.quantity || item.unit_price_cents);
+}
+
+function updateOrderItemsPreview(event) {
+  const editor = event.currentTarget.closest
+    ? event.currentTarget.closest("[data-order-items-editor]") || event.currentTarget
+    : event.currentTarget;
+  if (!editor) return;
+
+  const card = editor.closest("[data-order-id]");
+  const items = orderItemsFromCard(card);
+  const subtotal = items.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.unit_price_cents || 0), 0);
+  editor.querySelector("[data-order-items-preview]").textContent = money(subtotal);
 }
 
 function option(value, label, selected) {
@@ -939,6 +1107,40 @@ async function saveOrderStatus(event) {
   }
 
   setMessage(message, "Saved.", "success");
+  await Promise.all([loadOrders(), loadPickupDates()]);
+}
+
+async function saveOrderItems(event) {
+  const card = event.currentTarget.closest("[data-order-id]");
+  const message = card.querySelector("[data-order-message]");
+  const button = event.currentTarget;
+  const items = orderItemsFromCard(card);
+  const invalidItem = items.find(item =>
+    (!item.product_id && !item.name) || item.quantity <= 0 || item.unit_price_cents < 0 || item.loaf_spots < 0
+  );
+
+  if (!items.length || invalidItem) {
+    setMessage(message, "Add at least one item with a product/name, quantity, and price.", "error");
+    return;
+  }
+
+  button.disabled = true;
+  setMessage(message, "Saving item changes...");
+
+  const { data, error } = await supabaseClient.rpc("admin_update_order_items", {
+    p_order_id: card.dataset.orderId,
+    p_items: items
+  });
+
+  button.disabled = false;
+
+  if (error) {
+    setMessage(message, error.message, "error");
+    return;
+  }
+
+  const savedOrder = Array.isArray(data) ? data[0] : data;
+  setMessage(message, `Items saved. New total: ${money(savedOrder?.total_cents || 0)}.`, "success");
   await Promise.all([loadOrders(), loadPickupDates()]);
 }
 
